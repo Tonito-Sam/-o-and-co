@@ -53,7 +53,7 @@ function UnionStationAdmin() {
   const repeatBookings = 38; // % from returning clients
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Union Station · Administrator"
         title="Lydia's command centre"
@@ -442,7 +442,7 @@ function ConversionAnalytics() {
                 {conversionByEvent.map(r => (
                   <TableRow key={r.eventCode}>
                     <TableCell>
-                      <div className="text-sm font-medium truncate max-w-[180px]">{r.event}</div>
+                      <div className="text-sm font-medium truncate max-w-45">{r.event}</div>
                       <div className="text-[10px] text-muted-foreground">{r.branch}</div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{formatInt(r.checkIns)}</TableCell>

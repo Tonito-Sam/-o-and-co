@@ -28,7 +28,7 @@ const conversation = [
 
 function AI() {
   return (
-    <div className="mx-auto max-w-[1100px]">
+    <div className="mx-auto max-w-275">
       <PageHeader
         eyebrow="AI & Automation"
         title="WorkspaceOS Assistant"

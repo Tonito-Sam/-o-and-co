@@ -14,7 +14,7 @@ export const Route = createFileRoute("/tenants")({
 function Tenants() {
   const totalMrr = tenants.reduce((s, t) => s + t.mrr, 0);
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Tenant Company Management"
         title="Companies"

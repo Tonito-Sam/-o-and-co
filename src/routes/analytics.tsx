@@ -33,7 +33,7 @@ function Analytics() {
   const charts = useMemo(() => ({ channels, colors, radar, revenueTrend }), []);
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Executive Intelligence"
         title="Group analytics"

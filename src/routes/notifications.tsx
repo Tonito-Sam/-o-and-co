@@ -29,7 +29,7 @@ const templates = [
 
 function Notifications() {
   return (
-    <div className="mx-auto max-w-[1200px]">
+    <div className="mx-auto max-w-300">
       <PageHeader
         eyebrow="Notifications Engine"
         title="Channels & templates"

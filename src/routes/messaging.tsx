@@ -68,7 +68,7 @@ function Messaging() {
   const channelIcon = (visibility: string) => visibility === "private" ? Lock : visibility === "restricted" ? ShieldCheck : Hash;
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Internal Communications"
         title="Messaging"

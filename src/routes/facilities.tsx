@@ -21,7 +21,7 @@ const typeColor: Record<string, string> = {
 
 function Facilities() {
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Smart Facility Management"
         title="Spaces"

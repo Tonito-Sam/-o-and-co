@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cafeOrders, cafeProducts, tenantOrderHistory, formatZAR, branches, ROLES, type CafeProduct } from "@/lib/mock";
+import { cafeOrders, cafeProducts, tenantOrderHistory, formatZAR, branches, type CafeProduct, createInvoice, PAYSTACK_PUBLIC_KEY, loadInvoices, downloadInvoicePdf, getRoleBranch, getRoleTenant } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
-import { Coffee, Plus, ShoppingBag, Minus, Trash2, ChefHat, Store, History, RotateCcw } from "lucide-react";
+import { Coffee, Plus, ShoppingBag, Minus, Trash2, ChefHat, Store, History, RotateCcw, ReceiptText, CreditCard, Wallet } from "lucide-react";
 import { toast } from "sonner";
+
+type PaystackPopup = { openIframe: () => void };
+
+declare global {
+  interface Window {
+    PaystackPop?: {
+      setup: (options: {
+        key: string;
+        email: string;
+        amount: number;
+        currency: string;
+        ref: string;
+        label?: string;
+        onClose?: () => void;
+        callback?: (response: { reference: string }) => void;
+      }) => PaystackPopup;
+    };
+  }
+}
+
+function createProductIllustration(product: Pick<CafeProduct, "name" | "category" | "branch">) {
+  const colors = ["#7c3aed", "#0f766e", "#ea580c", "#2563eb", "#b45309"];
+  const color = colors[product.name.length % colors.length];
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
+      <rect width="800" height="500" rx="36" fill="#f7f3ff"/>
+      <rect x="42" y="42" width="716" height="416" rx="28" fill="${color}" fill-opacity="0.13"/>
+      <circle cx="620" cy="180" r="120" fill="${color}" fill-opacity="0.2"/>
+      <rect x="92" y="300" width="300" height="70" rx="18" fill="${color}" fill-opacity="0.22"/>
+      <text x="92" y="190" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="700" fill="#111827">${product.name}</text>
+      <text x="92" y="240" font-family="Inter, Arial, sans-serif" font-size="24" fill="#374151">${product.category} · ${product.branch}</text>
+    </svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
 
 export const Route = createFileRoute("/cafe")({
   head: () => ({ meta: [{ title: "Café — WorkspaceOS" }] }),
@@ -24,21 +58,16 @@ export const Route = createFileRoute("/cafe")({
 const liveBranches = branches.filter(b => b.status === "live").map(b => b.name);
 const columns = ["Queued", "Preparing", "Ready", "Collected"];
 
-function tenantBranchFor(roleId: string): string {
-  const r = ROLES.find(x => x.id === roleId);
-  // tenant-admin scope contains branch name (e.g. "Tundra Capital · Bryanston")
-  const m = r?.scope.match(/(Bryanston|Kyalami|Rosebank|Union Station)/);
-  return m?.[1] ?? "Bryanston";
-}
-
 function Cafe() {
   const { role } = useRole();
   const isAdmin = ["group-ceo", "branch-manager", "community-manager", "lydia-admin"].includes(role.id);
   const defaultTab = isAdmin ? "admin" : "shop";
   const [tab, setTab] = useState(defaultTab);
+  const branch = getRoleBranch(role.id) ?? "Bryanston";
+  const tenant = getRoleTenant(role.id);
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Café"
         title="Office &amp; Co Café"
@@ -57,8 +86,8 @@ function Cafe() {
 
         {isAdmin && <TabsContent value="admin"><AdminPanel /></TabsContent>}
         {isAdmin && <TabsContent value="kitchen"><KitchenBoard /></TabsContent>}
-        <TabsContent value="shop"><Shop defaultBranch={tenantBranchFor(role.id)} canPickBranch={isAdmin} /></TabsContent>
-        <TabsContent value="orders"><MyOrders branch={tenantBranchFor(role.id)} /></TabsContent>
+        <TabsContent value="shop"><Shop defaultBranch={branch} canPickBranch={isAdmin} tenant={tenant} /></TabsContent>
+        <TabsContent value="orders"><MyOrders branch={branch} tenant={tenant} /></TabsContent>
       </Tabs>
     </div>
   );
@@ -102,7 +131,7 @@ function AdminPanel() {
           <div>
             <Label className="text-xs mb-1.5 block">Managing branch</Label>
             <Select value={branch} onValueChange={setBranch}>
-              <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-55"><SelectValue /></SelectTrigger>
               <SelectContent>{liveBranches.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -176,6 +205,8 @@ function ProductDialog({ branch, initial, onSave, onClose }: { branch: string; i
               <SelectTrigger /><SelectContent>{["Coffee", "Tea", "Cold Drinks", "Bakery", "Breakfast", "Lunch", "Snacks"].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select></div>
           <div className="space-y-1.5"><Label>Price (ZAR)</Label><Input type="number" value={form.price} onChange={e => setForm({ ...form, price: Number(e.target.value) })} /></div>
+          <div className="space-y-1.5 col-span-2"><Label>Vendor / seller</Label><Input value={form.vendor ?? ""} onChange={e => setForm({ ...form, vendor: e.target.value })} placeholder="Office & Co Café" /></div>
+          <div className="space-y-1.5 col-span-2"><Label>Image URL</Label><Input value={form.image ?? ""} onChange={e => setForm({ ...form, image: e.target.value })} placeholder="https://example.com/image.jpg" /></div>
         </div>
         <div className="space-y-1.5"><Label>Description</Label><Textarea rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
         <div className="flex items-center gap-6">
@@ -232,10 +263,13 @@ function KitchenBoard() {
 
 // ────────────────── Tenant shop ──────────────────
 
-function Shop({ defaultBranch, canPickBranch }: { defaultBranch: string; canPickBranch: boolean }) {
+function Shop({ defaultBranch, canPickBranch, tenant }: { defaultBranch: string; canPickBranch: boolean; tenant?: string }) {
   const [branch, setBranch] = useState(defaultBranch);
   const [cat, setCat] = useState<string>("All");
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [paymentMode, setPaymentMode] = useState<"charge" | "paystack">("charge");
+  const [invoicePreview, setInvoicePreview] = useState<string | null>(null);
+  const [paystackReady, setPaystackReady] = useState(false);
 
   const items = useMemo(() => cafeProducts.filter(p => p.branch === branch && p.available && (cat === "All" || p.category === cat)), [branch, cat]);
   const cats = useMemo(() => {
@@ -246,26 +280,83 @@ function Shop({ defaultBranch, canPickBranch }: { defaultBranch: string; canPick
   const inc = (id: string) => setCart(c => ({ ...c, [id]: (c[id] ?? 0) + 1 }));
   const dec = (id: string) => setCart(c => { const n = (c[id] ?? 0) - 1; const next = { ...c }; if (n <= 0) delete next[id]; else next[id] = n; return next; });
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.PaystackPop) {
+      setPaystackReady(true);
+      return;
+    }
+    const existing = document.querySelector('script[src="https://js.paystack.co/v1/inline.js"]');
+    if (existing) {
+      existing.addEventListener("load", () => setPaystackReady(Boolean(window.PaystackPop)), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://js.paystack.co/v1/inline.js";
+    script.async = true;
+    script.onload = () => setPaystackReady(Boolean(window.PaystackPop));
+    script.onerror = () => toast.error("Paystack could not be loaded. Please try again shortly.");
+    document.body.appendChild(script);
+  }, []);
+
   const cartItems = Object.entries(cart).map(([id, qty]) => {
     const p = cafeProducts.find(x => x.id === id)!;
     return { ...p, qty };
   });
   const subtotal = cartItems.reduce((s, i) => s + i.price * i.qty, 0);
+  const total = subtotal;
 
-  const checkout = (method: "Pay now" | "Charge to account") => {
+  const checkout = (method: "Charge to account" | "Paystack") => {
     if (cartItems.length === 0) return;
-    toast.success(`Order placed · ${branch} · ${method} · ${formatZAR(subtotal)}`);
+    const invoice = createInvoice({
+      tenant: tenant ?? "Tundra Capital",
+      amount: total,
+      status: method === "Charge to account" ? "Sent" : "Paid",
+      due: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      method: method === "Charge to account" ? "Charge to account" : "Paystack",
+      items: cartItems.map((item) => ({ name: item.name, qty: item.qty, price: item.price })),
+      branch,
+      kind: "cafe",
+      note: `${branch} café order via ${method}`,
+    });
+    const invoices = loadInvoices();
+    const latest = invoices.find((entry) => entry.id === invoice.id);
+    setInvoicePreview(latest?.id ?? null);
+    if (method === "Paystack") {
+      if (typeof window === "undefined" || !window.PaystackPop || !paystackReady) {
+        toast.info("Loading Paystack modal…");
+        return;
+      }
+      const popup = window.PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: "tenant@example.com",
+        amount: Math.round(total * 100),
+        currency: "ZAR",
+        ref: invoice.id,
+        label: `${branch} café order`,
+        onClose: () => {
+          toast.info("Paystack payment closed before completion.");
+        },
+        callback: (response) => {
+          toast.success(`Paystack payment completed · ${response.reference}`);
+          setCart({});
+        },
+      });
+      popup.openIframe();
+      return;
+    }
+    toast.success(`Charge to account confirmed · ${invoice.id}`);
     setCart({});
   };
 
   return (
-    <div className="grid lg:grid-cols-[1fr_340px] gap-4">
+    <div className="grid xl:grid-cols-[1.2fr_360px] gap-4">
       <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {canPickBranch ? (
               <Select value={branch} onValueChange={setBranch}>
-                <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-50"><SelectValue /></SelectTrigger>
                 <SelectContent>{liveBranches.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
               </Select>
             ) : (
@@ -277,31 +368,39 @@ function Shop({ defaultBranch, canPickBranch }: { defaultBranch: string; canPick
               ))}
             </div>
           </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="secondary" className="gap-1"><ReceiptText className="size-3" />Invoice ready after checkout</Badge>
+            <Badge variant="outline">Paystack sandbox: {PAYSTACK_PUBLIC_KEY}</Badge>
+          </div>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {items.map(p => (
-            <div key={p.id} className="card-soft p-4 flex flex-col">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="text-sm font-semibold">{p.name}</div>
-                  <Badge variant="outline" className="text-[10px] mt-1">{p.category}</Badge>
+            <div key={p.id} className="card-soft overflow-hidden flex flex-col">
+              <img src={p.image ?? createProductIllustration(p)} alt={p.name} className="h-40 w-full object-cover" />
+              <div className="p-4 flex flex-col flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold">{p.name}</div>
+                    <div className="text-[11px] text-muted-foreground mt-1">by {p.vendor ?? `${p.branch} Café`}</div>
+                    <Badge variant="outline" className="text-[10px] mt-1">{p.category}</Badge>
+                  </div>
+                  <div className="font-display text-base font-semibold tabular-nums">{formatZAR(p.price)}</div>
                 </div>
-                <div className="font-display text-base font-semibold tabular-nums">{formatZAR(p.price)}</div>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2 flex-1">{p.description}</p>
-              <div className="mt-3 flex items-center justify-between">
-                {p.popular && <Badge variant="secondary" className="text-[10px]">⭐ Popular</Badge>}
-                <div className="ml-auto flex items-center gap-1.5">
-                  {cart[p.id] ? (
-                    <>
-                      <Button size="icon" variant="outline" className="size-7" onClick={() => dec(p.id)}><Minus className="size-3" /></Button>
-                      <span className="text-sm font-medium w-5 text-center tabular-nums">{cart[p.id]}</span>
-                      <Button size="icon" variant="outline" className="size-7" onClick={() => inc(p.id)}><Plus className="size-3" /></Button>
-                    </>
-                  ) : (
-                    <Button size="sm" variant="outline" className="h-7 gap-1" onClick={() => inc(p.id)}><Plus className="size-3" />Add</Button>
-                  )}
+                <p className="text-xs text-muted-foreground mt-2 flex-1">{p.description}</p>
+                <div className="mt-3 flex items-center justify-between">
+                  {p.popular ? <Badge variant="secondary" className="text-[10px]">⭐ Popular</Badge> : <span />}
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {cart[p.id] ? (
+                      <>
+                        <Button size="icon" variant="outline" className="size-7" onClick={() => dec(p.id)}><Minus className="size-3" /></Button>
+                        <span className="text-sm font-medium w-5 text-center tabular-nums">{cart[p.id]}</span>
+                        <Button size="icon" variant="outline" className="size-7" onClick={() => inc(p.id)}><Plus className="size-3" /></Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-7 gap-1" onClick={() => inc(p.id)}><Plus className="size-3" />Add</Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -330,12 +429,28 @@ function Shop({ defaultBranch, canPickBranch }: { defaultBranch: string; canPick
                 </div>
               ))}
             </div>
-            <div className="border-t pt-3 mt-3 flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Subtotal</span>
-              <span className="font-display text-lg font-semibold tabular-nums">{formatZAR(subtotal)}</span>
+            <div className="border-t pt-3 mt-3 space-y-2 text-sm">
+              <div className="flex items-center justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-medium tabular-nums">{formatZAR(subtotal)}</span></div>
+              <div className="flex items-center justify-between"><span className="text-muted-foreground">Service</span><span className="font-medium">Included</span></div>
             </div>
-            <Button className="w-full mt-3" onClick={() => checkout("Charge to account")}>Charge to account</Button>
-            <Button variant="outline" className="w-full mt-2" onClick={() => checkout("Pay now")}>Pay now</Button>
+            <div className="mt-3 rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+              <label className="mb-2 flex items-center gap-2 font-medium text-foreground"><Wallet className="size-3.5" />Payment mode</label>
+              <div className="grid gap-2">
+                <button type="button" onClick={() => setPaymentMode("charge")} className={`flex items-center justify-between rounded-md border px-3 py-2 ${paymentMode === "charge" ? "border-brand bg-brand/10 text-brand" : "hover:bg-muted/50"}`}>
+                  <span className="flex items-center gap-2"><ReceiptText className="size-3.5" />Charge to account</span>
+                  <span className="text-[10px]">Invoice</span>
+                </button>
+                <button type="button" onClick={() => setPaymentMode("paystack")} className={`flex items-center justify-between rounded-md border px-3 py-2 ${paymentMode === "paystack" ? "border-brand bg-brand/10 text-brand" : "hover:bg-muted/50"}`}>
+                  <span className="flex items-center gap-2"><CreditCard className="size-3.5" />Pay now with Paystack</span>
+                  <span className="text-[10px]">Sandbox</span>
+                </button>
+              </div>
+            </div>
+            <Button className="w-full mt-3" onClick={() => checkout(paymentMode === "paystack" ? "Paystack" : "Charge to account")}>{paymentMode === "paystack" ? "Pay now with Paystack" : "Charge to account"}</Button>
+            {invoicePreview && <Button variant="outline" className="w-full mt-2" onClick={() => {
+              const invoice = loadInvoices().find((entry) => entry.id === invoicePreview);
+              if (invoice) downloadInvoicePdf(invoice);
+            }}>Download invoice PDF</Button>}
           </>
         )}
         <div className="mt-4 text-[11px] text-muted-foreground">Ready for pickup at the {branch} Café counter — average prep time 4 min.</div>
@@ -354,8 +469,8 @@ const STATUS_TONE: Record<string, string> = {
   Delivered: "bg-success/15 text-success border-success/30",
 };
 
-function MyOrders({ branch }: { branch: string }) {
-  const rows = tenantOrderHistory.filter(o => o.branch === branch && o.kind === "cafe");
+function MyOrders({ branch, tenant }: { branch: string; tenant?: string }) {
+  const rows = tenantOrderHistory.filter((o) => o.branch === branch && o.kind === "cafe" && (tenant ? o.tenant === tenant : true));
   const reorder = (id: string) => toast.success(`Reordered ${id} — added to your cart`);
   return (
     <div className="space-y-3">

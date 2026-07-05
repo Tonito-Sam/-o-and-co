@@ -41,7 +41,7 @@ const nav = [
   {
     label: "Community & Commerce",
     items: [
-      { title: "Community", url: "/community", icon: Users },
+      { title: "Feed", url: "/community", icon: Users },
       { title: "Events", url: "/events", icon: CalendarHeart },
       { title: "Content Hub", url: "/content", icon: Headphones },
       { title: "Café", url: "/cafe", icon: Coffee },

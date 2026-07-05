@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { leads, stages, formatZAR } from "@/lib/mock";
 import { Filter, Plus, Sparkles } from "lucide-react";
+
+const TOUR_LEADS_STORAGE_KEY = "oco-tour-leads";
 
 export const Route = createFileRoute("/crm")({
   head: () => ({ meta: [{ title: "CRM & Sales — WorkspaceOS" }] }),
@@ -11,10 +14,31 @@ export const Route = createFileRoute("/crm")({
 });
 
 function CRM() {
-  const byStage = stages.map((s) => ({ stage: s, items: leads.filter(l => l.stage === s) }));
-  const totalPipe = leads.reduce((s, l) => s + l.value, 0);
+  const [crmLeads, setCrmLeads] = useState(() => {
+    if (typeof window === "undefined") return leads;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(TOUR_LEADS_STORAGE_KEY) ?? "[]") as Array<Record<string, unknown>>;
+      return [...leads, ...saved];
+    } catch {
+      return leads;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(TOUR_LEADS_STORAGE_KEY) ?? "[]") as Array<Record<string, unknown>>;
+      setCrmLeads([...leads, ...saved]);
+    } catch {
+      setCrmLeads(leads);
+    }
+  }, []);
+
+  const byStage = useMemo(() => stages.map((s) => ({ stage: s, items: crmLeads.filter((l) => l.stage === s) })), [crmLeads]);
+  const totalPipe = useMemo(() => crmLeads.reduce((sum, lead) => sum + (lead.value ?? 0), 0), [crmLeads]);
+
   return (
-    <div className="mx-auto max-w-[1500px]">
+    <div className="mx-auto max-w-375">
       <PageHeader
         eyebrow="CRM & Sales Automation"
         title="Pipeline"
@@ -28,7 +52,7 @@ function CRM() {
         }
       />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Open pipeline" value={formatZAR(totalPipe)} hint={`${leads.length} deals`} />
+        <StatCard label="Open pipeline" value={formatZAR(totalPipe)} hint={`${crmLeads.length} deals`} />
         <StatCard label="Win rate (30d)" value="34%" delta="▲ 4pts" accent="success" />
         <StatCard label="Avg cycle" value="18 days" hint="Tour → Won" />
         <StatCard label="Tours this week" value="27" delta="+6 vs last" accent="brand" />

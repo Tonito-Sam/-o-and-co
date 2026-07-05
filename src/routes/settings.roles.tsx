@@ -29,7 +29,7 @@ function RoleSettings() {
   }
 
   return (
-    <div className="mx-auto max-w-[1300px]">
+    <div className="mx-auto max-w-325">
       <PageHeader
         eyebrow="Platform · Administration"
         title="Role-based community access"

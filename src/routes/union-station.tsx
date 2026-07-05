@@ -99,7 +99,7 @@ function UnionStation() {
   }, [requests]);
 
   return (
-    <div className="mx-auto max-w-[1400px]">
+    <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Union Station · Corporate Event Venue"
         title="Premier corporate events — Johannesburg"

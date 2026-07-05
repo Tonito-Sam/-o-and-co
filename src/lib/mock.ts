@@ -58,6 +58,129 @@ export const invoices = [
   { id: "INV-2026-0875", tenant: "Ember & Co.", amount: 14820, status: "Sent", due: "2026-06-28", method: "—" },
 ];
 
+export type InvoiceStatus = "Paid" | "Sent" | "Overdue" | "Draft";
+export type InvoiceMethod = "Charge to account" | "Paystack" | "EFT" | "PayFast" | "Card" | "—";
+export type InvoiceItem = { name: string; qty: number; price: number };
+export type Invoice = {
+  id: string;
+  tenant: string;
+  amount: number;
+  status: InvoiceStatus;
+  due: string;
+  method: InvoiceMethod;
+  items: InvoiceItem[];
+  issuedAt: string;
+  branch?: string;
+  kind?: "cafe" | "marketplace";
+  note?: string;
+};
+
+export const PAYSTACK_PUBLIC_KEY = "pk_test_1234567890abcdef";
+
+const invoiceStorageKey = "oco-generated-invoices";
+
+const escapePdfText = (text: string) => text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+
+const createPdfBlob = (lines: string[]) => {
+  const encoder = new TextEncoder();
+  const contentLines = lines
+    .map((line, index) => `BT /F1 12 Tf 50 ${760 - index * 14} Td (${escapePdfText(line)}) Tj ET`)
+    .join("\n");
+  const stream = encoder.encode(contentLines);
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+    `4 0 obj\n<< /Length ${stream.byteLength} >>\nstream\n${contentLines}\nendstream\nendobj\n`,
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [0];
+  objects.forEach((obj) => {
+    offsets.push(pdf.length);
+    pdf += obj;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  offsets.slice(1).forEach((offset) => pdf += `${offset.toString().padStart(10, "0")} 00000 n \n`);
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return new Blob([pdf], { type: "application/pdf" });
+};
+
+export const loadInvoices = (): Invoice[] => {
+  const seeded = [...invoices];
+  if (typeof window === "undefined") return seeded;
+  try {
+    const raw = window.localStorage.getItem(invoiceStorageKey);
+    if (!raw) return seeded;
+    const parsed = JSON.parse(raw) as Invoice[];
+    const merged = [...seeded];
+    parsed.forEach((invoice) => {
+      if (!merged.some((existing) => existing.id === invoice.id)) merged.unshift(invoice);
+    });
+    return merged.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+  } catch {
+    return seeded;
+  }
+};
+
+export const saveInvoices = (next: Invoice[]) => {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(invoiceStorageKey, JSON.stringify(next));
+  }
+  return next;
+};
+
+export const createInvoice = (input: Omit<Invoice, "id" | "issuedAt"> & Partial<Pick<Invoice, "id" | "issuedAt">>): Invoice => {
+  const invoice: Invoice = {
+    id: input.id ?? `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+    tenant: input.tenant,
+    amount: input.amount,
+    status: input.status ?? "Sent",
+    due: input.due ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    method: input.method,
+    items: input.items,
+    issuedAt: input.issuedAt ?? new Date().toISOString(),
+    branch: input.branch,
+    kind: input.kind,
+    note: input.note,
+  };
+  const existing = loadInvoices();
+  const next = [invoice, ...existing.filter((entry) => entry.id !== invoice.id)];
+  saveInvoices(next);
+  return invoice;
+};
+
+export const downloadInvoicePdf = (invoice: Invoice) => {
+  if (typeof window === "undefined") return;
+  const lines = [
+    "Office & Co",
+    "Tenant Invoice",
+    `Invoice: ${invoice.id}`,
+    `Issued: ${new Date(invoice.issuedAt).toLocaleDateString("en-ZA")}`,
+    `Due: ${invoice.due}`,
+    `Tenant: ${invoice.tenant}`,
+    `Branch: ${invoice.branch ?? "—"}`,
+    `Method: ${invoice.method}`,
+    "",
+    "Items",
+    ...invoice.items.map((item) => `${item.qty} × ${item.name} — ${formatZAR(item.price * item.qty)}`),
+    "",
+    `Total: ${formatZAR(invoice.amount)}`,
+    `Status: ${invoice.status}`,
+    invoice.note ? `Note: ${invoice.note}` : "",
+  ].filter(Boolean);
+  const blob = createPdfBlob(lines);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${invoice.id}.pdf`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
 export const cafeOrders = [
   { id: "C-9921", item: "Flat White + Croissant", tenant: "Tundra Capital", member: "James O.", method: "Charge to account", status: "Ready" },
   { id: "C-9922", item: "Cortado x2", tenant: "Helix Ventures", member: "Naledi K.", method: "Pay now", status: "Preparing" },
@@ -88,7 +211,68 @@ export const content = [
   { id: "M-4", title: "Negotiating enterprise contracts", kind: "Training", host: "Sales Academy with Samantha", duration: "55 min", plays: 980 },
 ];
 
-export const marketplace = [
+export type EditableSiteContent = {
+  landing: {
+    title: string;
+    subtitle: string;
+    heroImage?: string;
+  };
+  about: {
+    title: string;
+    body: string;
+    banner?: string;
+  };
+  gallery?: string[];
+};
+
+const editableContentKey = "oco-editable-content";
+
+export const defaultEditableContent: EditableSiteContent = {
+  landing: {
+    title: "Office & Co — inspiring places to work",
+    subtitle: "Flexible workspaces, studios and curated tenant communities.",
+    heroImage: undefined,
+  },
+  about: {
+    title: "About Office & Co",
+    body: "Office & Co brings together thoughtfully designed workspaces and a community of ambitious companies.\nWe build places where teams do their best work.",
+    banner: undefined,
+  },
+  gallery: [],
+};
+
+export const loadEditableContent = (): EditableSiteContent => {
+  if (typeof window === "undefined") return defaultEditableContent;
+  try {
+    const raw = window.localStorage.getItem(editableContentKey);
+    if (!raw) return defaultEditableContent;
+    return JSON.parse(raw) as EditableSiteContent;
+  } catch {
+    return defaultEditableContent;
+  }
+};
+
+export const saveEditableContent = (next: EditableSiteContent) => {
+  if (typeof window !== "undefined") window.localStorage.setItem(editableContentKey, JSON.stringify(next));
+  return next;
+};
+
+export type MarketplaceListing = {
+  id: string;
+  seller: string;
+  title: string;
+  price: number;
+  category: "Furniture" | "Services" | "Supplies" | "Other";
+  rating: number;
+  description?: string;
+  image?: string;
+  galleryImages?: string[];
+  listingType?: "product" | "service";
+  isPromo?: boolean;
+  salePrice?: number;
+};
+
+export const marketplace: MarketplaceListing[] = [
   { id: "MP-1", seller: "Office & Co Store", title: "Ergonomic standing desk", price: 6890, category: "Furniture", rating: 4.8 },
   { id: "MP-2", seller: "Helix Ventures", title: "Brand strategy sprint (2 wks)", price: 48000, category: "Services", rating: 4.9 },
   { id: "MP-3", seller: "Office & Co Store", title: "Premium stationery bundle", price: 480, category: "Supplies", rating: 4.6 },
@@ -115,6 +299,89 @@ const _zarFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 export const formatZAR = (n: number) => `R${_zarFmt.format(Math.round(n))}`;
 export const formatInt = (n: number) => _zarFmt.format(Math.round(n));
 
+export const getRoleById = (roleId: RoleId) => ROLES.find((r) => r.id === roleId);
+export const getRoleBranch = (roleId: RoleId) => getRoleById(roleId)?.branch;
+export const getRoleTenant = (roleId: RoleId) => getRoleById(roleId)?.tenant;
+export const isBillingRole = (roleId: RoleId) =>
+  ["group-ceo", "sales-manager", "branch-manager", "finance", "lydia-admin", "community-manager"].includes(roleId);
+
+const billingDraftKey = "oco-monthly-billing-drafts";
+const monthEndDay = (year: number, month: number) => new Date(year, month, 0).getDate();
+
+export const loadBillingDrafts = (): Invoice[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(billingDraftKey);
+    if (!raw) return [];
+    return JSON.parse(raw) as Invoice[];
+  } catch {
+    return [];
+  }
+};
+
+export const saveBillingDrafts = (next: Invoice[]) => {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(billingDraftKey, JSON.stringify(next));
+  }
+  return next;
+};
+
+export const clearBillingDrafts = (): Invoice[] => saveBillingDrafts([]);
+
+export const createInvoiceDraft = (input: Omit<Invoice, "id" | "issuedAt"> & Partial<Pick<Invoice, "id" | "issuedAt">>): Invoice => ({
+  id: input.id ?? `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+  tenant: input.tenant,
+  amount: input.amount,
+  status: input.status ?? "Draft",
+  due: input.due ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  method: input.method,
+  items: input.items,
+  issuedAt: input.issuedAt ?? new Date().toISOString(),
+  branch: input.branch,
+  kind: input.kind,
+  note: input.note,
+});
+
+export const prepareMonthlyBilling = (month: string): Invoice[] => {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const prefix = `${year}-${String(monthNumber).padStart(2, "0")}`;
+  const buckets = tenantOrderHistory
+    .filter((order) => order.method === "Charge to account" && order.placedAt.startsWith(prefix))
+    .reduce<Record<string, { tenant: string; branch: string; items: InvoiceItem[]; amount: number; kinds: Set<string> }>>((acc, order) => {
+      const key = `${order.tenant}:${order.branch}`;
+      const bucket = acc[key] ?? { tenant: order.tenant, branch: order.branch, items: [], amount: 0, kinds: new Set<string>() };
+      order.items.forEach((item) => bucket.items.push(item));
+      bucket.amount += order.total;
+      bucket.kinds.add(order.kind);
+      acc[key] = bucket;
+      return acc;
+    }, {});
+
+  const drafts = Object.values(buckets).map((bucket) => createInvoiceDraft({
+    tenant: bucket.tenant,
+    amount: bucket.amount,
+    status: "Draft",
+    due: `${year}-${String(monthNumber).padStart(2, "0")}-${String(monthEndDay(year, monthNumber)).padStart(2, "0")}`,
+    method: "Charge to account",
+    items: bucket.items,
+    branch: bucket.branch,
+    kind: bucket.kinds.size === 1 ? (bucket.kinds.has("marketplace") ? "marketplace" : "cafe") : undefined,
+    note: `Month-end charge summary for ${month}. Ready for billing review and send by the 24th of next month.`,
+  }));
+
+  saveBillingDrafts(drafts);
+  return drafts;
+};
+
+export const sendBillingInvoices = (drafts: Invoice[]): Invoice[] => {
+  const existing = loadInvoices();
+  const sent = drafts.map((invoice) => ({ ...invoice, status: invoice.status === "Paid" ? "Paid" : "Sent" }));
+  const next = [...sent, ...existing.filter((entry) => !drafts.some((draft) => draft.id === entry.id))];
+  saveInvoices(next);
+  clearBillingDrafts();
+  return sent;
+};
+
 // ───────────────────────── Roles & Users ─────────────────────────
 
 export type RoleId =
@@ -125,7 +392,8 @@ export type RoleId =
   | "community-manager"
   | "finance"
   | "lydia-admin"
-  | "tenant-admin";
+  | "tenant-admin"
+  | "external-vendor";
 
 export type CommunityModuleKey = "community" | "events" | "marketplace" | "cafe" | "content";
 
@@ -145,6 +413,8 @@ export type RoleDef = {
   scope: string;
   nav: string[]; // route urls visible to this role
   communityModules: Record<CommunityModuleKey, boolean>;
+  branch?: string;
+  tenant?: string;
 };
 
 const all = (v: boolean): Record<CommunityModuleKey, boolean> =>
@@ -166,8 +436,8 @@ export const ROLES: RoleDef[] = [
     initials: "SN",
     title: "Sales & CRM Manager",
     scope: "Group pipeline · All branches",
-    nav: ["/", "/crm", "/tenants", "/analytics", "/ai-assistant", "/events", "/content", "/union-station", "/messaging", "/notifications"],
-    communityModules: { community: false, events: true, marketplace: false, cafe: false, content: true },
+    nav: ["/", "/crm", "/tenants", "/analytics", "/ai-assistant", "/events", "/content", "/union-station", "/cafe", "/marketplace", "/messaging", "/notifications"],
+    communityModules: { community: false, events: true, marketplace: true, cafe: true, content: true },
   },
   {
     id: "rosebank-sales",
@@ -175,8 +445,8 @@ export const ROLES: RoleDef[] = [
     initials: "RM",
     title: "Sales & CRM · Rosebank",
     scope: "Rosebank branch pipeline",
-    nav: ["/", "/crm", "/tenants", "/events", "/content", "/community", "/messaging", "/notifications"],
-    communityModules: { community: true, events: true, marketplace: false, cafe: false, content: true },
+    nav: ["/", "/crm", "/tenants", "/events", "/content", "/community", "/cafe", "/marketplace", "/messaging", "/notifications"],
+    communityModules: { community: true, events: true, marketplace: true, cafe: true, content: true },
   },
   {
     id: "branch-manager",
@@ -184,8 +454,9 @@ export const ROLES: RoleDef[] = [
     initials: "NK",
     title: "Branch Manager · Bryanston",
     scope: "Bryanston only",
-    nav: ["/", "/tenants", "/facilities", "/bookings", "/support", "/community", "/events", "/cafe", "/billing", "/messaging", "/notifications"],
-    communityModules: { community: true, events: true, marketplace: false, cafe: true, content: false },
+    branch: "Bryanston",
+    nav: ["/", "/tenants", "/facilities", "/bookings", "/support", "/community", "/events", "/cafe", "/marketplace", "/billing", "/messaging", "/notifications"],
+    communityModules: { community: true, events: true, marketplace: true, cafe: true, content: false },
   },
   {
     id: "community-manager",
@@ -193,6 +464,7 @@ export const ROLES: RoleDef[] = [
     initials: "LP",
     title: "Community Manager · Rosebank",
     scope: "Rosebank community",
+    branch: "Rosebank",
     nav: ["/", "/community", "/events", "/content", "/cafe", "/marketplace", "/bookings", "/messaging", "/notifications"],
     communityModules: all(true),
   },
@@ -202,8 +474,8 @@ export const ROLES: RoleDef[] = [
     initials: "MO",
     title: "Finance Lead",
     scope: "Group financial ops",
-    nav: ["/", "/billing", "/tenants", "/analytics", "/messaging", "/notifications"],
-    communityModules: all(false),
+    nav: ["/", "/billing", "/tenants", "/analytics", "/cafe", "/marketplace", "/messaging", "/notifications"],
+    communityModules: { community: false, events: false, marketplace: true, cafe: true, content: false },
   },
   {
     id: "lydia-admin",
@@ -211,8 +483,9 @@ export const ROLES: RoleDef[] = [
     initials: "LM",
     title: "Union Station Administrator",
     scope: "Union Station · Corporate Events",
-    nav: ["/", "/union-station", "/union-station-admin", "/bookings", "/facilities", "/support", "/events", "/analytics", "/messaging", "/notifications"],
-    communityModules: { community: false, events: true, marketplace: false, cafe: false, content: false },
+    branch: "Union Station",
+    nav: ["/", "/union-station", "/union-station-admin", "/bookings", "/facilities", "/support", "/events", "/analytics", "/cafe", "/marketplace", "/messaging", "/notifications"],
+    communityModules: { community: false, events: true, marketplace: true, cafe: true, content: false },
   },
   {
     id: "tenant-admin",
@@ -220,8 +493,19 @@ export const ROLES: RoleDef[] = [
     initials: "JO",
     title: "Tundra Capital · Account Admin",
     scope: "Tundra Capital · Bryanston",
+    branch: "Bryanston",
+    tenant: "Tundra Capital",
     nav: ["/", "/bookings", "/cafe", "/community", "/events", "/marketplace", "/billing", "/support", "/mobile-app", "/notifications", "/messaging"],
     communityModules: { community: true, events: true, marketplace: true, cafe: true, content: false },
+  },
+  {
+    id: "external-vendor",
+    user: "Northstar Studio",
+    initials: "NS",
+    title: "External Vendor",
+    scope: "Marketplace vendor access",
+    nav: ["/marketplace"],
+    communityModules: { community: false, events: false, marketplace: true, cafe: false, content: false },
   },
 ];
 
@@ -284,6 +568,8 @@ export type CafeProduct = {
   description: string;
   available: boolean;
   popular?: boolean;
+  image?: string;
+  vendor?: string;
 };
 
 export const cafeProducts: CafeProduct[] = [
@@ -436,15 +722,16 @@ export const conversionByBranch = (() => {
 // ───────────── Tenant ordering — café + marketplace history ─────────────
 export type TenantOrder = {
   id: string; placedAt: string; kind: "cafe" | "marketplace"; branch: string;
+  tenant: string;
   items: { name: string; qty: number; price: number }[]; total: number;
   method: "Charge to account" | "Pay now";
   status: "Queued" | "Preparing" | "Ready" | "Collected" | "Shipped" | "Delivered";
 };
 
 export const tenantOrderHistory: TenantOrder[] = [
-  { id: "ORD-3141", placedAt: "2026-06-24 09:12", kind: "cafe", branch: "Bryanston", items: [{ name: "Single Origin Flat White", qty: 2, price: 38 }, { name: "Almond Croissant", qty: 1, price: 42 }], total: 118, method: "Charge to account", status: "Collected" },
-  { id: "ORD-3142", placedAt: "2026-06-24 12:48", kind: "cafe", branch: "Bryanston", items: [{ name: "Power Bowl", qty: 3, price: 125 }], total: 375, method: "Charge to account", status: "Ready" },
-  { id: "ORD-3143", placedAt: "2026-06-23 15:20", kind: "marketplace", branch: "Bryanston", items: [{ name: "Ergonomic standing desk", qty: 1, price: 6890 }], total: 6890, method: "Charge to account", status: "Shipped" },
-  { id: "ORD-3144", placedAt: "2026-06-22 08:30", kind: "cafe", branch: "Bryanston", items: [{ name: "Cortado", qty: 4, price: 34 }], total: 136, method: "Pay now", status: "Collected" },
-  { id: "ORD-3145", placedAt: "2026-06-20 10:04", kind: "marketplace", branch: "Bryanston", items: [{ name: "Premium stationery bundle", qty: 2, price: 480 }], total: 960, method: "Charge to account", status: "Delivered" },
+  { id: "ORD-3141", placedAt: "2026-06-24 09:12", kind: "cafe", branch: "Bryanston", tenant: "Tundra Capital", items: [{ name: "Single Origin Flat White", qty: 2, price: 38 }, { name: "Almond Croissant", qty: 1, price: 42 }], total: 118, method: "Charge to account", status: "Collected" },
+  { id: "ORD-3142", placedAt: "2026-06-24 12:48", kind: "cafe", branch: "Bryanston", tenant: "Tundra Capital", items: [{ name: "Power Bowl", qty: 3, price: 125 }], total: 375, method: "Charge to account", status: "Ready" },
+  { id: "ORD-3143", placedAt: "2026-06-23 15:20", kind: "marketplace", branch: "Bryanston", tenant: "Tundra Capital", items: [{ name: "Ergonomic standing desk", qty: 1, price: 6890 }], total: 6890, method: "Charge to account", status: "Shipped" },
+  { id: "ORD-3144", placedAt: "2026-06-22 08:30", kind: "cafe", branch: "Bryanston", tenant: "Tundra Capital", items: [{ name: "Cortado", qty: 4, price: 34 }], total: 136, method: "Pay now", status: "Collected" },
+  { id: "ORD-3145", placedAt: "2026-06-20 10:04", kind: "marketplace", branch: "Bryanston", tenant: "Tundra Capital", items: [{ name: "Premium stationery bundle", qty: 2, price: 480 }], total: 960, method: "Charge to account", status: "Delivered" },
 ];

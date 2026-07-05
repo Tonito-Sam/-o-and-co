@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as UnionStationAdminRouteImport } from './routes/union-station-admin'
 import { Route as UnionStationRouteImport } from './routes/union-station'
+import { Route as TourRequestRouteImport } from './routes/tour-request'
+import { Route as TourCalendarRouteImport } from './routes/tour-calendar'
 import { Route as TenantsRouteImport } from './routes/tenants'
 import { Route as SupportRouteImport } from './routes/support'
 import { Route as NotificationsRouteImport } from './routes/notifications'
@@ -30,10 +32,10 @@ import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AiAssistantRouteImport } from './routes/ai-assistant'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsRolesRouteImport } from './routes/settings.roles'
+import { Route as ContentManageRouteImport } from './routes/content.manage'
 import { Route as CheckinCodeRouteImport } from './routes/checkin.$code'
 import { Route as AuthVerifyEmailRouteImport } from './routes/auth.verify-email'
 import { Route as AuthSsoRouteImport } from './routes/auth.sso'
-import { Route as AuthSignUpRouteImport } from './routes/auth.sign-up'
 import { Route as AuthSignInRouteImport } from './routes/auth.sign-in'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
 import { Route as AuthMfaRouteImport } from './routes/auth.mfa'
@@ -52,6 +54,16 @@ const UnionStationAdminRoute = UnionStationAdminRouteImport.update({
 const UnionStationRoute = UnionStationRouteImport.update({
   id: '/union-station',
   path: '/union-station',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TourRequestRoute = TourRequestRouteImport.update({
+  id: '/tour-request',
+  path: '/tour-request',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TourCalendarRoute = TourCalendarRouteImport.update({
+  id: '/tour-calendar',
+  path: '/tour-calendar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TenantsRoute = TenantsRouteImport.update({
@@ -144,6 +156,11 @@ const SettingsRolesRoute = SettingsRolesRouteImport.update({
   path: '/settings/roles',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContentManageRoute = ContentManageRouteImport.update({
+  id: '/manage',
+  path: '/manage',
+  getParentRoute: () => ContentRoute,
+} as any)
 const CheckinCodeRoute = CheckinCodeRouteImport.update({
   id: '/checkin/$code',
   path: '/checkin/$code',
@@ -157,11 +174,6 @@ const AuthVerifyEmailRoute = AuthVerifyEmailRouteImport.update({
 const AuthSsoRoute = AuthSsoRouteImport.update({
   id: '/auth/sso',
   path: '/auth/sso',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthSignUpRoute = AuthSignUpRouteImport.update({
-  id: '/auth/sign-up',
-  path: '/auth/sign-up',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthSignInRoute = AuthSignInRouteImport.update({
@@ -193,7 +205,7 @@ export interface FileRoutesByFullPath {
   '/bookings': typeof BookingsRoute
   '/cafe': typeof CafeRoute
   '/community': typeof CommunityRoute
-  '/content': typeof ContentRoute
+  '/content': typeof ContentRouteWithChildren
   '/crm': typeof CrmRoute
   '/events': typeof EventsRoute
   '/facilities': typeof FacilitiesRoute
@@ -203,6 +215,8 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof NotificationsRoute
   '/support': typeof SupportRoute
   '/tenants': typeof TenantsRoute
+  '/tour-calendar': typeof TourCalendarRoute
+  '/tour-request': typeof TourRequestRoute
   '/union-station': typeof UnionStationRoute
   '/union-station-admin': typeof UnionStationAdminRoute
   '/welcome': typeof WelcomeRoute
@@ -210,10 +224,10 @@ export interface FileRoutesByFullPath {
   '/auth/mfa': typeof AuthMfaRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/sign-in': typeof AuthSignInRoute
-  '/auth/sign-up': typeof AuthSignUpRoute
   '/auth/sso': typeof AuthSsoRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/checkin/$code': typeof CheckinCodeRoute
+  '/content/manage': typeof ContentManageRoute
   '/settings/roles': typeof SettingsRolesRoute
 }
 export interface FileRoutesByTo {
@@ -224,7 +238,7 @@ export interface FileRoutesByTo {
   '/bookings': typeof BookingsRoute
   '/cafe': typeof CafeRoute
   '/community': typeof CommunityRoute
-  '/content': typeof ContentRoute
+  '/content': typeof ContentRouteWithChildren
   '/crm': typeof CrmRoute
   '/events': typeof EventsRoute
   '/facilities': typeof FacilitiesRoute
@@ -234,6 +248,8 @@ export interface FileRoutesByTo {
   '/notifications': typeof NotificationsRoute
   '/support': typeof SupportRoute
   '/tenants': typeof TenantsRoute
+  '/tour-calendar': typeof TourCalendarRoute
+  '/tour-request': typeof TourRequestRoute
   '/union-station': typeof UnionStationRoute
   '/union-station-admin': typeof UnionStationAdminRoute
   '/welcome': typeof WelcomeRoute
@@ -241,10 +257,10 @@ export interface FileRoutesByTo {
   '/auth/mfa': typeof AuthMfaRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/sign-in': typeof AuthSignInRoute
-  '/auth/sign-up': typeof AuthSignUpRoute
   '/auth/sso': typeof AuthSsoRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/checkin/$code': typeof CheckinCodeRoute
+  '/content/manage': typeof ContentManageRoute
   '/settings/roles': typeof SettingsRolesRoute
 }
 export interface FileRoutesById {
@@ -256,7 +272,7 @@ export interface FileRoutesById {
   '/bookings': typeof BookingsRoute
   '/cafe': typeof CafeRoute
   '/community': typeof CommunityRoute
-  '/content': typeof ContentRoute
+  '/content': typeof ContentRouteWithChildren
   '/crm': typeof CrmRoute
   '/events': typeof EventsRoute
   '/facilities': typeof FacilitiesRoute
@@ -266,6 +282,8 @@ export interface FileRoutesById {
   '/notifications': typeof NotificationsRoute
   '/support': typeof SupportRoute
   '/tenants': typeof TenantsRoute
+  '/tour-calendar': typeof TourCalendarRoute
+  '/tour-request': typeof TourRequestRoute
   '/union-station': typeof UnionStationRoute
   '/union-station-admin': typeof UnionStationAdminRoute
   '/welcome': typeof WelcomeRoute
@@ -273,10 +291,10 @@ export interface FileRoutesById {
   '/auth/mfa': typeof AuthMfaRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/sign-in': typeof AuthSignInRoute
-  '/auth/sign-up': typeof AuthSignUpRoute
   '/auth/sso': typeof AuthSsoRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/checkin/$code': typeof CheckinCodeRoute
+  '/content/manage': typeof ContentManageRoute
   '/settings/roles': typeof SettingsRolesRoute
 }
 export interface FileRouteTypes {
@@ -299,6 +317,8 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/support'
     | '/tenants'
+    | '/tour-calendar'
+    | '/tour-request'
     | '/union-station'
     | '/union-station-admin'
     | '/welcome'
@@ -306,10 +326,10 @@ export interface FileRouteTypes {
     | '/auth/mfa'
     | '/auth/reset-password'
     | '/auth/sign-in'
-    | '/auth/sign-up'
     | '/auth/sso'
     | '/auth/verify-email'
     | '/checkin/$code'
+    | '/content/manage'
     | '/settings/roles'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -330,6 +350,8 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/support'
     | '/tenants'
+    | '/tour-calendar'
+    | '/tour-request'
     | '/union-station'
     | '/union-station-admin'
     | '/welcome'
@@ -337,10 +359,10 @@ export interface FileRouteTypes {
     | '/auth/mfa'
     | '/auth/reset-password'
     | '/auth/sign-in'
-    | '/auth/sign-up'
     | '/auth/sso'
     | '/auth/verify-email'
     | '/checkin/$code'
+    | '/content/manage'
     | '/settings/roles'
   id:
     | '__root__'
@@ -361,6 +383,8 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/support'
     | '/tenants'
+    | '/tour-calendar'
+    | '/tour-request'
     | '/union-station'
     | '/union-station-admin'
     | '/welcome'
@@ -368,10 +392,10 @@ export interface FileRouteTypes {
     | '/auth/mfa'
     | '/auth/reset-password'
     | '/auth/sign-in'
-    | '/auth/sign-up'
     | '/auth/sso'
     | '/auth/verify-email'
     | '/checkin/$code'
+    | '/content/manage'
     | '/settings/roles'
   fileRoutesById: FileRoutesById
 }
@@ -383,7 +407,7 @@ export interface RootRouteChildren {
   BookingsRoute: typeof BookingsRoute
   CafeRoute: typeof CafeRoute
   CommunityRoute: typeof CommunityRoute
-  ContentRoute: typeof ContentRoute
+  ContentRoute: typeof ContentRouteWithChildren
   CrmRoute: typeof CrmRoute
   EventsRoute: typeof EventsRoute
   FacilitiesRoute: typeof FacilitiesRoute
@@ -393,6 +417,8 @@ export interface RootRouteChildren {
   NotificationsRoute: typeof NotificationsRoute
   SupportRoute: typeof SupportRoute
   TenantsRoute: typeof TenantsRoute
+  TourCalendarRoute: typeof TourCalendarRoute
+  TourRequestRoute: typeof TourRequestRoute
   UnionStationRoute: typeof UnionStationRoute
   UnionStationAdminRoute: typeof UnionStationAdminRoute
   WelcomeRoute: typeof WelcomeRoute
@@ -400,7 +426,6 @@ export interface RootRouteChildren {
   AuthMfaRoute: typeof AuthMfaRoute
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   AuthSignInRoute: typeof AuthSignInRoute
-  AuthSignUpRoute: typeof AuthSignUpRoute
   AuthSsoRoute: typeof AuthSsoRoute
   AuthVerifyEmailRoute: typeof AuthVerifyEmailRoute
   CheckinCodeRoute: typeof CheckinCodeRoute
@@ -428,6 +453,20 @@ declare module '@tanstack/react-router' {
       path: '/union-station'
       fullPath: '/union-station'
       preLoaderRoute: typeof UnionStationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tour-request': {
+      id: '/tour-request'
+      path: '/tour-request'
+      fullPath: '/tour-request'
+      preLoaderRoute: typeof TourRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tour-calendar': {
+      id: '/tour-calendar'
+      path: '/tour-calendar'
+      fullPath: '/tour-calendar'
+      preLoaderRoute: typeof TourCalendarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tenants': {
@@ -556,6 +595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRolesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/content/manage': {
+      id: '/content/manage'
+      path: '/manage'
+      fullPath: '/content/manage'
+      preLoaderRoute: typeof ContentManageRouteImport
+      parentRoute: typeof ContentRoute
+    }
     '/checkin/$code': {
       id: '/checkin/$code'
       path: '/checkin/$code'
@@ -575,13 +621,6 @@ declare module '@tanstack/react-router' {
       path: '/auth/sso'
       fullPath: '/auth/sso'
       preLoaderRoute: typeof AuthSsoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth/sign-up': {
-      id: '/auth/sign-up'
-      path: '/auth/sign-up'
-      fullPath: '/auth/sign-up'
-      preLoaderRoute: typeof AuthSignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/sign-in': {
@@ -615,6 +654,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ContentRouteChildren {
+  ContentManageRoute: typeof ContentManageRoute
+}
+
+const ContentRouteChildren: ContentRouteChildren = {
+  ContentManageRoute: ContentManageRoute,
+}
+
+const ContentRouteWithChildren =
+  ContentRoute._addFileChildren(ContentRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AiAssistantRoute: AiAssistantRoute,
@@ -623,7 +673,7 @@ const rootRouteChildren: RootRouteChildren = {
   BookingsRoute: BookingsRoute,
   CafeRoute: CafeRoute,
   CommunityRoute: CommunityRoute,
-  ContentRoute: ContentRoute,
+  ContentRoute: ContentRouteWithChildren,
   CrmRoute: CrmRoute,
   EventsRoute: EventsRoute,
   FacilitiesRoute: FacilitiesRoute,
@@ -633,6 +683,8 @@ const rootRouteChildren: RootRouteChildren = {
   NotificationsRoute: NotificationsRoute,
   SupportRoute: SupportRoute,
   TenantsRoute: TenantsRoute,
+  TourCalendarRoute: TourCalendarRoute,
+  TourRequestRoute: TourRequestRoute,
   UnionStationRoute: UnionStationRoute,
   UnionStationAdminRoute: UnionStationAdminRoute,
   WelcomeRoute: WelcomeRoute,
@@ -640,7 +692,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthMfaRoute: AuthMfaRoute,
   AuthResetPasswordRoute: AuthResetPasswordRoute,
   AuthSignInRoute: AuthSignInRoute,
-  AuthSignUpRoute: AuthSignUpRoute,
   AuthSsoRoute: AuthSsoRoute,
   AuthVerifyEmailRoute: AuthVerifyEmailRoute,
   CheckinCodeRoute: CheckinCodeRoute,

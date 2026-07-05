@@ -11,7 +11,7 @@ export const Route = createFileRoute("/support")({
 
 function Support() {
   return (
-    <div className="mx-auto max-w-[1300px]">
+    <div className="mx-auto max-w-325">
       <PageHeader
         eyebrow="Support & Service Desk"
         title="Tickets"

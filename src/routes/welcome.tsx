@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,7 @@ function Welcome() {
 }
 
 function SiteNav() {
+  const nav = useNavigate();
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-50 border-b bg-background/85 backdrop-blur-xl">
@@ -67,7 +68,7 @@ function SiteNav() {
         </nav>
         <div className="hidden sm:flex items-center gap-2">
           <Button asChild variant="ghost" size="sm"><Link to="/auth/sign-in" className="gap-1.5"><LogIn className="size-3.5" />Portal login</Link></Button>
-          <Button asChild size="sm" className="gap-1.5"><Link to="/auth/sign-up">Book a tour <ArrowRight className="size-3.5" /></Link></Button>
+          <Button size="sm" className="gap-1.5" onClick={() => nav({ to: "/tour-request" })}>Book a tour <ArrowRight className="size-3.5" /></Button>
         </div>
         <Button variant="ghost" size="sm" className="sm:hidden" onClick={() => setOpen(v => !v)}>Menu</Button>
       </div>
@@ -79,7 +80,7 @@ function SiteNav() {
           <a href="#community" onClick={() => setOpen(false)} className="block text-sm py-1">Community</a>
           <div className="flex gap-2 pt-2">
             <Button asChild variant="outline" size="sm" className="flex-1"><Link to="/auth/sign-in">Portal login</Link></Button>
-            <Button asChild size="sm" className="flex-1"><Link to="/auth/sign-up">Book a tour</Link></Button>
+            <Button size="sm" className="flex-1" onClick={() => nav({ to: "/tour-request" })}>Book a tour</Button>
           </div>
         </div>
       )}
@@ -88,6 +89,7 @@ function SiteNav() {
 }
 
 function Hero() {
+  const nav = useNavigate();
   const [i, setI] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setI(p => (p + 1) % slides.length), 5500);
@@ -127,7 +129,7 @@ function Hero() {
             {s.copy} Premium coworking, private offices and Johannesburg's most-booked corporate event venue — all under one membership.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Button asChild size="lg" className="gap-1.5"><Link to="/auth/sign-up">Book a tour <ArrowRight className="size-4" /></Link></Button>
+            <Button size="lg" className="gap-1.5" onClick={() => nav({ to: "/tour-request" })}>Book a tour <ArrowRight className="size-4" /></Button>
             <Button asChild size="lg" variant="outline" className="bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white"><Link to="/auth/sign-in" className="gap-1.5"><LogIn className="size-4" />Portal login</Link></Button>
           </div>
           <div className="mt-6 hidden sm:flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-white/75">
@@ -165,7 +167,7 @@ function PortalCTA() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild className="gap-1.5"><Link to="/auth/sign-in"><LogIn className="size-4" />Portal login</Link></Button>
-          <Button asChild variant="outline"><Link to="/auth/sign-up">Request access</Link></Button>
+          <Button asChild variant="outline"><Link to="/tour-request">Book a tour</Link></Button>
         </div>
       </div>
       <div className="mx-auto max-w-7xl px-4 sm:px-6 pb-8 flex flex-wrap gap-1.5">
@@ -204,7 +206,7 @@ function Branches() {
                 <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1"><MapPin className="size-3" /> {b.city} · {b.region}</div>
                 <div className="mt-3 pt-3 border-t text-xs text-muted-foreground flex items-center justify-between">
                   <span>{Math.round(b.occupancy * 100)}% occupied</span>
-                  <Link to="/auth/sign-up" className="text-brand hover:underline">Tour →</Link>
+                  <button type="button" onClick={() => nav({ to: "/tour-request" })} className="text-brand hover:underline">Tour →</button>
                 </div>
               </div>
             </div>
@@ -279,7 +281,7 @@ function Membership() {
               <ul className="mt-5 space-y-2 text-sm flex-1">
                 {t.features.map(f => <li key={f} className="flex items-start gap-2"><Check className="size-4 text-brand shrink-0 mt-0.5" />{f}</li>)}
               </ul>
-              <Button asChild variant={t.featured ? "default" : "outline"} className="mt-6"><Link to="/auth/sign-up">{t.cta}</Link></Button>
+              <Button variant={t.featured ? "default" : "outline"} className="mt-6" onClick={() => nav({ to: "/tour-request" })}>{t.cta}</Button>
             </div>
           ))}
         </div>
@@ -347,7 +349,7 @@ function CTA() {
           <h2 className="relative font-display text-3xl md:text-4xl font-semibold">Come work how you actually want to work.</h2>
           <p className="relative text-white/70 mt-3 max-w-xl mx-auto">Book a tour at any branch. Walk in. Plug in. Belong.</p>
           <div className="relative mt-7 flex flex-wrap justify-center gap-3">
-            <Button asChild size="lg" variant="secondary"><Link to="/auth/sign-up">Book a tour</Link></Button>
+            <Button size="lg" variant="secondary" onClick={() => nav({ to: "/tour-request" })}>Book a tour</Button>
             <Button asChild size="lg" variant="outline" className="bg-transparent text-white border-white/30 hover:bg-white/10 hover:text-white"><Link to="/auth/sign-in">Portal login</Link></Button>
           </div>
         </div>

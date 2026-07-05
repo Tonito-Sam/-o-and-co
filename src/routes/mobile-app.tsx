@@ -10,11 +10,11 @@ export const Route = createFileRoute("/mobile-app")({
 
 function MobileApp() {
   return (
-    <div className="mx-auto max-w-[1100px]">
+    <div className="mx-auto max-w-275">
       <PageHeader
         eyebrow="Tenant Mobile App"
         title="The pocket workspace"
-        description="Native-feeling iOS and Android. Bookings, café, community, invoices — one tap from anywhere."
+        description="Native-feeling iOS and Android. Bookings, café, feed, invoices — one tap from anywhere."
       />
 
       <div className="grid lg:grid-cols-2 gap-10 items-center">
@@ -24,7 +24,7 @@ function MobileApp() {
               { icon: CalendarRange, title: "Bookings", text: "Reserve any room at any branch in seconds." },
               { icon: Wallet, title: "Invoices", text: "Pay outstanding amounts or charge to account." },
               { icon: Coffee, title: "Café", text: "Order ahead. Skip the queue." },
-              { icon: Users, title: "Community", text: "Welcomes, announcements, hiring, launches." },
+              { icon: Users, title: "Feed", text: "Welcomes, announcements, hiring, launches." },
               { icon: Headphones, title: "Podcasts & content", text: "Stream the Office & Co library on the go." },
               { icon: ShoppingBag, title: "Marketplace", text: "Office supplies and tenant-to-tenant services." },
               { icon: Bell, title: "Smart notifications", text: "Only what matters — email, SMS, WhatsApp or push." },
@@ -41,7 +41,7 @@ function MobileApp() {
         </div>
 
         <div className="flex justify-center">
-          <div className="relative w-[300px] h-[620px] rounded-[44px] bg-foreground p-3 shadow-elevated">
+          <div className="relative w-75 h-155 rounded-[44px] bg-foreground p-3 shadow-elevated">
             <div className="w-full h-full rounded-[34px] bg-background overflow-hidden flex flex-col">
               <div className="h-7 bg-foreground rounded-b-2xl mx-auto w-1/3" />
               <div className="px-5 py-4 flex-1 overflow-hidden">
@@ -68,7 +68,7 @@ function MobileApp() {
                 </div>
 
                 <div className="card-soft p-3 mt-3">
-                  <div className="flex items-center gap-2"><Sparkles className="size-3 text-brand" /><div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Community</div></div>
+                  <div className="flex items-center gap-2"><Sparkles className="size-3 text-brand" /><div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Feed</div></div>
                   <div className="text-[11px] mt-1">Please welcome John Smith from ABC Consulting 🎉</div>
                 </div>
 

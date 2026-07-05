@@ -17,6 +17,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TopBar } from "@/components/TopBar";
+import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Toaster } from "@/components/ui/sonner";
 import { RoleProvider } from "@/lib/role-context";
 
@@ -64,7 +65,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: "Enterprise operating system for coworking and serviced offices." },
       { property: "og:type", content: "website" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/png", href: "/src/assets/OCO-Stacked-Logo-White-300px.png" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -76,13 +80,13 @@ function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head><HeadContent /></head>
-      <body>{children}<Scripts /></body>
+      <body suppressHydrationWarning>{children}<Scripts /></body>
     </html>
   );
 }
 
 function isPublicRoute(pathname: string) {
-  return pathname.startsWith("/auth") || pathname === "/welcome" || pathname.startsWith("/welcome/") || pathname.startsWith("/checkin");
+  return pathname.startsWith("/auth") || pathname === "/welcome" || pathname.startsWith("/welcome/") || pathname.startsWith("/checkin") || pathname === "/tour-calendar" || pathname === "/tour-request";
 }
 
 function RootComponent() {
@@ -112,9 +116,10 @@ function RootComponent() {
               <AppSidebar />
               <div className="flex flex-1 flex-col min-w-0">
                 <TopBar />
-                <main className="flex-1 px-4 md:px-8 py-6 md:py-8">
+                <main className="flex-1 px-4 md:px-8 py-6 md:py-8 pb-24 md:pb-8">
                   <Outlet />
                 </main>
+                <MobileBottomNav />
               </div>
             </div>
             <Toaster />

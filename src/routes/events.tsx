@@ -13,7 +13,7 @@ export const Route = createFileRoute("/events")({
 
 function Events() {
   return (
-    <div className="mx-auto max-w-[1300px]">
+    <div className="mx-auto max-w-325">
       <PageHeader
         eyebrow="Events & Networking"
         title="Upcoming events"
