@@ -13,6 +13,7 @@ import "@fontsource/figtree/500.css";
 import "@fontsource/figtree/600.css";
 
 import appCss from "../styles.css?url";
+import faviconImage from "../assets/OCO-Stacked-Logo-White-300px.png";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -67,7 +68,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
-      { rel: "icon", type: "image/png", href: "/src/assets/OCO-Stacked-Logo-White-300px.png" },
+      { rel: "icon", type: "image/png", href: faviconImage },
     ],
   }),
   shellComponent: RootShell,

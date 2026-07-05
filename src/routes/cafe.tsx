@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -191,6 +191,17 @@ function ProductDialog({ branch, initial, onSave, onClose }: { branch: string; i
     id: `CP-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
     branch, name: "", category: "Coffee", price: 35, description: "", available: true, popular: false,
   });
+
+  const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((prev) => ({ ...prev, image: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <DialogContent>
       <DialogHeader>
@@ -206,7 +217,11 @@ function ProductDialog({ branch, initial, onSave, onClose }: { branch: string; i
             </Select></div>
           <div className="space-y-1.5"><Label>Price (ZAR)</Label><Input type="number" value={form.price} onChange={e => setForm({ ...form, price: Number(e.target.value) })} /></div>
           <div className="space-y-1.5 col-span-2"><Label>Vendor / seller</Label><Input value={form.vendor ?? ""} onChange={e => setForm({ ...form, vendor: e.target.value })} placeholder="Office & Co Café" /></div>
-          <div className="space-y-1.5 col-span-2"><Label>Image URL</Label><Input value={form.image ?? ""} onChange={e => setForm({ ...form, image: e.target.value })} placeholder="https://example.com/image.jpg" /></div>
+          <div className="space-y-1.5 col-span-2">
+            <Label>Product image</Label>
+            <Input type="file" accept="image/*" onChange={handleImageUpload} />
+            {form.image ? <img src={form.image} alt="Product preview" className="mt-2 h-24 w-full rounded-md object-cover border" /> : null}
+          </div>
         </div>
         <div className="space-y-1.5"><Label>Description</Label><Textarea rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
         <div className="flex items-center gap-6">
