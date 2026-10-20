@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { marketplace, tenantOrderHistory, ROLES, formatZAR, createInvoice, PAYSTACK_PUBLIC_KEY, loadInvoices, downloadInvoicePdf, getRoleBranch, getRoleTenant, type MarketplaceListing, type RoleId } from "@/lib/mock";
+import { marketplace, tenantOrderHistory, ROLES, formatZAR, createInvoice, PAYSTACK_PUBLIC_KEY, loadInvoices, downloadInvoicePdf, getRoleBranch, getRoleTenant, legacyDemoTenantNames, type MarketplaceListing, type RoleId } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
 import { Star, ShoppingBag, History, RotateCcw, Store, Plus, Minus, ReceiptText, Wallet, CreditCard } from "lucide-react";
 import { toast } from "sonner";
@@ -68,8 +68,8 @@ function Marketplace() {
   const isTenant = role.id === "tenant-admin";
   const isVendor = role.id === "external-vendor";
   const canManageVendors = ["group-ceo", "sales-manager", "rosebank-sales", "branch-manager", "community-manager", "finance", "lydia-admin"].includes(role.id);
-  const branch = tenantBranchFor(role.id);
-  const tenant = getRoleTenant(role.id);
+  const branch = role.branch ?? tenantBranchFor(role.id);
+  const tenant = role.tenant ?? getRoleTenant(role.id);
   const [tab, setTab] = useState(isTenant ? "shop" : "shop");
   const [vendorTab, setVendorTab] = useState("listings");
   const [cat, setCat] = useState("All");
@@ -100,7 +100,19 @@ function Marketplace() {
     const storedVendors = window.localStorage.getItem("oco-marketplace-vendors");
     if (storedVendors) {
       try {
-        setVendors(JSON.parse(storedVendors) as MarketplaceVendor[]);
+        const savedVendors = JSON.parse(storedVendors) as MarketplaceVendor[];
+        const registeredVendors = savedVendors.filter(
+          (vendor) =>
+            !legacyDemoTenantNames.has(vendor.name) &&
+            !legacyDemoTenantNames.has(vendor.company),
+        );
+        setVendors(registeredVendors);
+        if (registeredVendors.length !== savedVendors.length) {
+          window.localStorage.setItem(
+            "oco-marketplace-vendors",
+            JSON.stringify(registeredVendors),
+          );
+        }
       } catch {
         window.localStorage.removeItem("oco-marketplace-vendors");
       }
@@ -539,10 +551,10 @@ function Marketplace() {
 
       {!isVendor ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <StatCard label="GMV (month)" value={formatZAR(1_280_000)} delta="▲ 18%" accent="success" />
+          <StatCard label="GMV (month)" value="No data" hint="Registered transactions only" />
           <StatCard label="Active listings" value={String(listings.length)} />
-          <StatCard label="Tenant sellers" value="38" delta="+5" accent="brand" />
-          <StatCard label="Avg rating" value="4.7" hint="↑ from 4.6" />
+          <StatCard label="Registered tenant sellers" value="0" hint="No registered seller profiles" />
+          <StatCard label="Avg rating" value="No data" hint="No verified seller ratings" />
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
@@ -562,7 +574,7 @@ function Marketplace() {
           {isTenant && (
             <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
               <Badge variant="outline" className="gap-1"><Store className="size-3" />Delivering to {branch}</Badge>
-              <span>· Charge-to-account enabled for all Tundra Capital members</span>
+              <span>· Charge-to-account availability follows your registered organization</span>
             </div>
           )}
           <div className="flex gap-2 mb-4 flex-wrap">

@@ -3,6 +3,8 @@ import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { tickets } from "@/lib/mock";
+import { useRole } from "@/lib/role-context";
+import { OrganizationSupportView } from "@/components/tenant/OrganizationViews";
 
 export const Route = createFileRoute("/support")({
   head: () => ({ meta: [{ title: "Support — WorkspaceOS" }] }),
@@ -10,6 +12,14 @@ export const Route = createFileRoute("/support")({
 });
 
 function Support() {
+  const { role } = useRole();
+  if (role.id === "organization-admin" || role.id === "organization-member") {
+    return <OrganizationSupportView />;
+  }
+  return <AdminSupport />;
+}
+
+function AdminSupport() {
   return (
     <div className="mx-auto max-w-325">
       <PageHeader
@@ -35,16 +45,29 @@ function Support() {
           <div className="col-span-1 text-right">Status</div>
         </div>
         {tickets.map((t) => (
-          <div key={t.id} className="grid grid-cols-12 px-4 py-3.5 text-sm items-center hover:bg-muted/30 cursor-pointer">
+          <div
+            key={t.id}
+            className="grid grid-cols-12 px-4 py-3.5 text-sm items-center hover:bg-muted/30 cursor-pointer"
+          >
             <div className="col-span-2 font-mono text-xs">{t.id}</div>
             <div className="col-span-4 font-medium">{t.subject}</div>
             <div className="col-span-2 text-muted-foreground">{t.tenant}</div>
             <div className="col-span-1">
-              <Badge variant={t.priority === "High" ? "destructive" : "secondary"} className="text-[10px]">{t.priority}</Badge>
+              <Badge
+                variant={t.priority === "High" ? "destructive" : "secondary"}
+                className="text-[10px]"
+              >
+                {t.priority}
+              </Badge>
             </div>
             <div className="col-span-2 text-xs text-muted-foreground">{t.sla}</div>
             <div className="col-span-1 text-right">
-              <Badge variant={t.status === "Resolved" ? "default" : "outline"} className="text-[10px]">{t.status}</Badge>
+              <Badge
+                variant={t.status === "Resolved" ? "default" : "outline"}
+                className="text-[10px]"
+              >
+                {t.status}
+              </Badge>
             </div>
           </div>
         ))}

@@ -310,7 +310,7 @@ function NewDmDialog({ onClose }: { onClose: () => void }) {
           </div>
         </div>
         <div>
-          <Label className="text-xs mb-1.5 block flex items-center gap-1.5"><Building2 className="size-3" />Tenant managers</Label>
+          <Label className="text-xs mb-1.5 flex items-center gap-1.5"><Building2 className="size-3" />Tenant managers</Label>
           <div className="flex flex-wrap gap-1.5">
             {tenantManagers.map(t => (
               <button

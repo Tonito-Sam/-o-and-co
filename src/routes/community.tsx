@@ -59,7 +59,7 @@ function createReply(body: string, author = "You", role = "Member"): FeedReply {
   };
 }
 
-function countReplies(replies: FeedReply[]) {
+function countReplies(replies: FeedReply[]): number {
   return replies.reduce((total, reply) => total + 1 + countReplies(reply.replies), 0);
 }
 
@@ -450,10 +450,7 @@ function Community() {
           </div>
           <div className="card-soft p-4">
             <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2 font-medium">Awaiting approval</div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span>Helix Ventures · Launch</span><Button size="sm" variant="ghost" className="h-6 text-[11px]">Review</Button></div>
-              <div className="flex justify-between"><span>BrightSeed · Promo</span><Button size="sm" variant="ghost" className="h-6 text-[11px]">Review</Button></div>
-            </div>
+            <p className="text-sm text-muted-foreground">No tenant posts awaiting approval.</p>
           </div>
         </aside>
       </div>

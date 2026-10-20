@@ -16,13 +16,17 @@ import { Route as TourRequestRouteImport } from './routes/tour-request'
 import { Route as TourCalendarRouteImport } from './routes/tour-calendar'
 import { Route as TenantsRouteImport } from './routes/tenants'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as OutreachRouteImport } from './routes/outreach'
+import { Route as OrganizationRouteImport } from './routes/organization'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as NotificationsRouteImport } from './routes/notifications'
-import { Route as MobileAppRouteImport } from './routes/mobile-app'
 import { Route as MessagingRouteImport } from './routes/messaging'
 import { Route as MarketplaceRouteImport } from './routes/marketplace'
+import { Route as LeadsIntelligenceRouteImport } from './routes/leads-intelligence'
 import { Route as FacilitiesRouteImport } from './routes/facilities'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as CrmRouteImport } from './routes/crm'
+import { Route as CrawlerIntelligenceRouteImport } from './routes/crawler-intelligence'
 import { Route as ContentRouteImport } from './routes/content'
 import { Route as CommunityRouteImport } from './routes/community'
 import { Route as CafeRouteImport } from './routes/cafe'
@@ -30,12 +34,14 @@ import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as BillingRouteImport } from './routes/billing'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AiAssistantRouteImport } from './routes/ai-assistant'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsRolesRouteImport } from './routes/settings.roles'
 import { Route as ContentManageRouteImport } from './routes/content.manage'
 import { Route as CheckinCodeRouteImport } from './routes/checkin.$code'
 import { Route as AuthVerifyEmailRouteImport } from './routes/auth.verify-email'
 import { Route as AuthSsoRouteImport } from './routes/auth.sso'
+import { Route as AuthSignUpRouteImport } from './routes/auth.sign-up'
 import { Route as AuthSignInRouteImport } from './routes/auth.sign-in'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
 import { Route as AuthMfaRouteImport } from './routes/auth.mfa'
@@ -76,14 +82,24 @@ const SupportRoute = SupportRouteImport.update({
   path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OutreachRoute = OutreachRouteImport.update({
+  id: '/outreach',
+  path: '/outreach',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrganizationRoute = OrganizationRouteImport.update({
+  id: '/organization',
+  path: '/organization',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const NotificationsRoute = NotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MobileAppRoute = MobileAppRouteImport.update({
-  id: '/mobile-app',
-  path: '/mobile-app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MessagingRoute = MessagingRouteImport.update({
@@ -94,6 +110,11 @@ const MessagingRoute = MessagingRouteImport.update({
 const MarketplaceRoute = MarketplaceRouteImport.update({
   id: '/marketplace',
   path: '/marketplace',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeadsIntelligenceRoute = LeadsIntelligenceRouteImport.update({
+  id: '/leads-intelligence',
+  path: '/leads-intelligence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FacilitiesRoute = FacilitiesRouteImport.update({
@@ -109,6 +130,11 @@ const EventsRoute = EventsRouteImport.update({
 const CrmRoute = CrmRouteImport.update({
   id: '/crm',
   path: '/crm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrawlerIntelligenceRoute = CrawlerIntelligenceRouteImport.update({
+  id: '/crawler-intelligence',
+  path: '/crawler-intelligence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContentRoute = ContentRouteImport.update({
@@ -146,6 +172,11 @@ const AiAssistantRoute = AiAssistantRouteImport.update({
   path: '/ai-assistant',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -176,6 +207,11 @@ const AuthSsoRoute = AuthSsoRouteImport.update({
   path: '/auth/sso',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthSignUpRoute = AuthSignUpRouteImport.update({
+  id: '/auth/sign-up',
+  path: '/auth/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthSignInRoute = AuthSignInRouteImport.update({
   id: '/auth/sign-in',
   path: '/auth/sign-in',
@@ -199,6 +235,7 @@ const AuthForgotPasswordRoute = AuthForgotPasswordRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/ai-assistant': typeof AiAssistantRoute
   '/analytics': typeof AnalyticsRoute
   '/billing': typeof BillingRoute
@@ -206,13 +243,17 @@ export interface FileRoutesByFullPath {
   '/cafe': typeof CafeRoute
   '/community': typeof CommunityRoute
   '/content': typeof ContentRouteWithChildren
+  '/crawler-intelligence': typeof CrawlerIntelligenceRoute
   '/crm': typeof CrmRoute
   '/events': typeof EventsRoute
   '/facilities': typeof FacilitiesRoute
+  '/leads-intelligence': typeof LeadsIntelligenceRoute
   '/marketplace': typeof MarketplaceRoute
   '/messaging': typeof MessagingRoute
-  '/mobile-app': typeof MobileAppRoute
   '/notifications': typeof NotificationsRoute
+  '/onboarding': typeof OnboardingRoute
+  '/organization': typeof OrganizationRoute
+  '/outreach': typeof OutreachRoute
   '/support': typeof SupportRoute
   '/tenants': typeof TenantsRoute
   '/tour-calendar': typeof TourCalendarRoute
@@ -224,6 +265,7 @@ export interface FileRoutesByFullPath {
   '/auth/mfa': typeof AuthMfaRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/sign-in': typeof AuthSignInRoute
+  '/auth/sign-up': typeof AuthSignUpRoute
   '/auth/sso': typeof AuthSsoRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/checkin/$code': typeof CheckinCodeRoute
@@ -232,6 +274,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/ai-assistant': typeof AiAssistantRoute
   '/analytics': typeof AnalyticsRoute
   '/billing': typeof BillingRoute
@@ -239,13 +282,17 @@ export interface FileRoutesByTo {
   '/cafe': typeof CafeRoute
   '/community': typeof CommunityRoute
   '/content': typeof ContentRouteWithChildren
+  '/crawler-intelligence': typeof CrawlerIntelligenceRoute
   '/crm': typeof CrmRoute
   '/events': typeof EventsRoute
   '/facilities': typeof FacilitiesRoute
+  '/leads-intelligence': typeof LeadsIntelligenceRoute
   '/marketplace': typeof MarketplaceRoute
   '/messaging': typeof MessagingRoute
-  '/mobile-app': typeof MobileAppRoute
   '/notifications': typeof NotificationsRoute
+  '/onboarding': typeof OnboardingRoute
+  '/organization': typeof OrganizationRoute
+  '/outreach': typeof OutreachRoute
   '/support': typeof SupportRoute
   '/tenants': typeof TenantsRoute
   '/tour-calendar': typeof TourCalendarRoute
@@ -257,6 +304,7 @@ export interface FileRoutesByTo {
   '/auth/mfa': typeof AuthMfaRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/sign-in': typeof AuthSignInRoute
+  '/auth/sign-up': typeof AuthSignUpRoute
   '/auth/sso': typeof AuthSsoRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/checkin/$code': typeof CheckinCodeRoute
@@ -266,6 +314,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/ai-assistant': typeof AiAssistantRoute
   '/analytics': typeof AnalyticsRoute
   '/billing': typeof BillingRoute
@@ -273,13 +322,17 @@ export interface FileRoutesById {
   '/cafe': typeof CafeRoute
   '/community': typeof CommunityRoute
   '/content': typeof ContentRouteWithChildren
+  '/crawler-intelligence': typeof CrawlerIntelligenceRoute
   '/crm': typeof CrmRoute
   '/events': typeof EventsRoute
   '/facilities': typeof FacilitiesRoute
+  '/leads-intelligence': typeof LeadsIntelligenceRoute
   '/marketplace': typeof MarketplaceRoute
   '/messaging': typeof MessagingRoute
-  '/mobile-app': typeof MobileAppRoute
   '/notifications': typeof NotificationsRoute
+  '/onboarding': typeof OnboardingRoute
+  '/organization': typeof OrganizationRoute
+  '/outreach': typeof OutreachRoute
   '/support': typeof SupportRoute
   '/tenants': typeof TenantsRoute
   '/tour-calendar': typeof TourCalendarRoute
@@ -291,6 +344,7 @@ export interface FileRoutesById {
   '/auth/mfa': typeof AuthMfaRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
   '/auth/sign-in': typeof AuthSignInRoute
+  '/auth/sign-up': typeof AuthSignUpRoute
   '/auth/sso': typeof AuthSsoRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/checkin/$code': typeof CheckinCodeRoute
@@ -301,6 +355,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/ai-assistant'
     | '/analytics'
     | '/billing'
@@ -308,13 +363,17 @@ export interface FileRouteTypes {
     | '/cafe'
     | '/community'
     | '/content'
+    | '/crawler-intelligence'
     | '/crm'
     | '/events'
     | '/facilities'
+    | '/leads-intelligence'
     | '/marketplace'
     | '/messaging'
-    | '/mobile-app'
     | '/notifications'
+    | '/onboarding'
+    | '/organization'
+    | '/outreach'
     | '/support'
     | '/tenants'
     | '/tour-calendar'
@@ -326,6 +385,7 @@ export interface FileRouteTypes {
     | '/auth/mfa'
     | '/auth/reset-password'
     | '/auth/sign-in'
+    | '/auth/sign-up'
     | '/auth/sso'
     | '/auth/verify-email'
     | '/checkin/$code'
@@ -334,6 +394,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/ai-assistant'
     | '/analytics'
     | '/billing'
@@ -341,13 +402,17 @@ export interface FileRouteTypes {
     | '/cafe'
     | '/community'
     | '/content'
+    | '/crawler-intelligence'
     | '/crm'
     | '/events'
     | '/facilities'
+    | '/leads-intelligence'
     | '/marketplace'
     | '/messaging'
-    | '/mobile-app'
     | '/notifications'
+    | '/onboarding'
+    | '/organization'
+    | '/outreach'
     | '/support'
     | '/tenants'
     | '/tour-calendar'
@@ -359,6 +424,7 @@ export interface FileRouteTypes {
     | '/auth/mfa'
     | '/auth/reset-password'
     | '/auth/sign-in'
+    | '/auth/sign-up'
     | '/auth/sso'
     | '/auth/verify-email'
     | '/checkin/$code'
@@ -367,6 +433,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/ai-assistant'
     | '/analytics'
     | '/billing'
@@ -374,13 +441,17 @@ export interface FileRouteTypes {
     | '/cafe'
     | '/community'
     | '/content'
+    | '/crawler-intelligence'
     | '/crm'
     | '/events'
     | '/facilities'
+    | '/leads-intelligence'
     | '/marketplace'
     | '/messaging'
-    | '/mobile-app'
     | '/notifications'
+    | '/onboarding'
+    | '/organization'
+    | '/outreach'
     | '/support'
     | '/tenants'
     | '/tour-calendar'
@@ -392,6 +463,7 @@ export interface FileRouteTypes {
     | '/auth/mfa'
     | '/auth/reset-password'
     | '/auth/sign-in'
+    | '/auth/sign-up'
     | '/auth/sso'
     | '/auth/verify-email'
     | '/checkin/$code'
@@ -401,6 +473,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   AiAssistantRoute: typeof AiAssistantRoute
   AnalyticsRoute: typeof AnalyticsRoute
   BillingRoute: typeof BillingRoute
@@ -408,13 +481,17 @@ export interface RootRouteChildren {
   CafeRoute: typeof CafeRoute
   CommunityRoute: typeof CommunityRoute
   ContentRoute: typeof ContentRouteWithChildren
+  CrawlerIntelligenceRoute: typeof CrawlerIntelligenceRoute
   CrmRoute: typeof CrmRoute
   EventsRoute: typeof EventsRoute
   FacilitiesRoute: typeof FacilitiesRoute
+  LeadsIntelligenceRoute: typeof LeadsIntelligenceRoute
   MarketplaceRoute: typeof MarketplaceRoute
   MessagingRoute: typeof MessagingRoute
-  MobileAppRoute: typeof MobileAppRoute
   NotificationsRoute: typeof NotificationsRoute
+  OnboardingRoute: typeof OnboardingRoute
+  OrganizationRoute: typeof OrganizationRoute
+  OutreachRoute: typeof OutreachRoute
   SupportRoute: typeof SupportRoute
   TenantsRoute: typeof TenantsRoute
   TourCalendarRoute: typeof TourCalendarRoute
@@ -426,6 +503,7 @@ export interface RootRouteChildren {
   AuthMfaRoute: typeof AuthMfaRoute
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
   AuthSignInRoute: typeof AuthSignInRoute
+  AuthSignUpRoute: typeof AuthSignUpRoute
   AuthSsoRoute: typeof AuthSsoRoute
   AuthVerifyEmailRoute: typeof AuthVerifyEmailRoute
   CheckinCodeRoute: typeof CheckinCodeRoute
@@ -483,18 +561,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/outreach': {
+      id: '/outreach'
+      path: '/outreach'
+      fullPath: '/outreach'
+      preLoaderRoute: typeof OutreachRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/organization': {
+      id: '/organization'
+      path: '/organization'
+      fullPath: '/organization'
+      preLoaderRoute: typeof OrganizationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/notifications': {
       id: '/notifications'
       path: '/notifications'
       fullPath: '/notifications'
       preLoaderRoute: typeof NotificationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mobile-app': {
-      id: '/mobile-app'
-      path: '/mobile-app'
-      fullPath: '/mobile-app'
-      preLoaderRoute: typeof MobileAppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/messaging': {
@@ -509,6 +601,13 @@ declare module '@tanstack/react-router' {
       path: '/marketplace'
       fullPath: '/marketplace'
       preLoaderRoute: typeof MarketplaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leads-intelligence': {
+      id: '/leads-intelligence'
+      path: '/leads-intelligence'
+      fullPath: '/leads-intelligence'
+      preLoaderRoute: typeof LeadsIntelligenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/facilities': {
@@ -530,6 +629,13 @@ declare module '@tanstack/react-router' {
       path: '/crm'
       fullPath: '/crm'
       preLoaderRoute: typeof CrmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crawler-intelligence': {
+      id: '/crawler-intelligence'
+      path: '/crawler-intelligence'
+      fullPath: '/crawler-intelligence'
+      preLoaderRoute: typeof CrawlerIntelligenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/content': {
@@ -581,6 +687,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AiAssistantRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -621,6 +734,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/sso'
       fullPath: '/auth/sso'
       preLoaderRoute: typeof AuthSsoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/sign-up': {
+      id: '/auth/sign-up'
+      path: '/auth/sign-up'
+      fullPath: '/auth/sign-up'
+      preLoaderRoute: typeof AuthSignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/sign-in': {
@@ -667,6 +787,7 @@ const ContentRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   AiAssistantRoute: AiAssistantRoute,
   AnalyticsRoute: AnalyticsRoute,
   BillingRoute: BillingRoute,
@@ -674,13 +795,17 @@ const rootRouteChildren: RootRouteChildren = {
   CafeRoute: CafeRoute,
   CommunityRoute: CommunityRoute,
   ContentRoute: ContentRouteWithChildren,
+  CrawlerIntelligenceRoute: CrawlerIntelligenceRoute,
   CrmRoute: CrmRoute,
   EventsRoute: EventsRoute,
   FacilitiesRoute: FacilitiesRoute,
+  LeadsIntelligenceRoute: LeadsIntelligenceRoute,
   MarketplaceRoute: MarketplaceRoute,
   MessagingRoute: MessagingRoute,
-  MobileAppRoute: MobileAppRoute,
   NotificationsRoute: NotificationsRoute,
+  OnboardingRoute: OnboardingRoute,
+  OrganizationRoute: OrganizationRoute,
+  OutreachRoute: OutreachRoute,
   SupportRoute: SupportRoute,
   TenantsRoute: TenantsRoute,
   TourCalendarRoute: TourCalendarRoute,
@@ -692,6 +817,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthMfaRoute: AuthMfaRoute,
   AuthResetPasswordRoute: AuthResetPasswordRoute,
   AuthSignInRoute: AuthSignInRoute,
+  AuthSignUpRoute: AuthSignUpRoute,
   AuthSsoRoute: AuthSsoRoute,
   AuthVerifyEmailRoute: AuthVerifyEmailRoute,
   CheckinCodeRoute: CheckinCodeRoute,

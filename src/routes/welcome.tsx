@@ -2,25 +2,65 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { BrandLogo } from "@/components/BrandLogo";
 import bryanstonImg from "@/assets/space-bryanston.jpg";
 import rosebankImg from "@/assets/space-rosebank.jpg";
 import kyalamiImg from "@/assets/space-kyalami.jpg";
 import unionImg from "@/assets/space-union-station.jpg";
-import { ArrowRight, Check, Sparkles, MapPin, Calendar, Users, Coffee, ShieldCheck, Landmark, ChevronLeft, ChevronRight, LogIn, Building2 } from "lucide-react";
-import { branches, demoAccounts } from "@/lib/mock";
+import { ArrowRight, Check, Sparkles, MapPin, Calendar, Users, Coffee, ShieldCheck, Landmark, ChevronLeft, ChevronRight, LogIn, Building2, Phone, Mail } from "lucide-react";
+import { branches, demoAccounts, downloadInvoicePdf, type Invoice } from "@/lib/mock";
+import { toast } from "sonner";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export const Route = createFileRoute("/welcome")({
   head: () => ({
     meta: [
       { title: "Office & Co — Workspaces that work as hard as you do" },
-      { name: "description", content: "Premium coworking, serviced offices and South Africa's most-booked corporate event venue. Kyalami · Bryanston · Rosebank · Union Station." },
+      { name: "description", content: "Premium coworking and serviced offices in Kyalami and Rosebank, plus public corporate events at Union Station." },
       { property: "og:title", content: "Office & Co — Workspaces, community, events." },
       { property: "og:description", content: "From hot desks to gala dinners — one membership across Johannesburg's most loved workspaces." },
       { property: "og:type", content: "website" },
     ],
   }),
   component: Welcome,
+});
+
+const tomorrowDate = () => {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  return new Intl.DateTimeFormat("en-CA").format(date);
+};
+
+type OneOffBookingResult = {
+  lead_id: string;
+  booking_id: string;
+  invoice_id: string;
+  reference: string;
+  amount_zar: number;
+  due_at: string;
+};
+
+const invoiceFromBooking = (
+  result: OneOffBookingResult,
+  tenant: string,
+  branch: string,
+  item: string,
+  note: string,
+): Invoice => ({
+  id: result.reference,
+  tenant,
+  amount: result.amount_zar,
+  status: "Sent",
+  due: result.due_at,
+  method: "—",
+  items: [{ name: item, qty: 1, price: result.amount_zar }],
+  issuedAt: new Date().toISOString().slice(0, 10),
+  branch,
+  kind: "marketplace",
+  note,
 });
 
 const slides = [
@@ -36,6 +76,7 @@ function Welcome() {
       <SiteNav />
       <Hero />
       <PortalCTA />
+      <BranchBookNow />
       <Branches />
       <UnionStationFeature />
       <Membership />
@@ -180,7 +221,380 @@ function PortalCTA() {
   );
 }
 
+function BranchBookNow() {
+  const live = branches.filter(b => b.status === "live");
+  const [preferredBranch, setPreferredBranch] = useState("Kyalami");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [company, setCompany] = useState("");
+  const [eventPurpose, setEventPurpose] = useState("Meeting room booking");
+  const [eventGuests, setEventGuests] = useState("1");
+  const [eventDate, setEventDate] = useState(tomorrowDate);
+  const [eventStartTime, setEventStartTime] = useState("09:00");
+  const [eventEndTime, setEventEndTime] = useState("13:00");
+  const [notes, setNotes] = useState("Looking for a boardroom and a client-facing space for a half-day session.");
+  const [showcaseOpen, setShowcaseOpen] = useState(false);
+  const [showcaseBranch, setShowcaseBranch] = useState<(typeof live)[number] | null>(null);
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [leadName, setLeadName] = useState("");
+  const [leadCompany, setLeadCompany] = useState("");
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadGuests, setLeadGuests] = useState("8");
+  const [leadPurpose, setLeadPurpose] = useState("Boardroom meeting");
+  const [leadDate, setLeadDate] = useState(tomorrowDate);
+  const [leadStartTime, setLeadStartTime] = useState("09:00");
+  const [leadEndTime, setLeadEndTime] = useState("13:00");
+  const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(null);
+
+  const handleSubmit = async () => {
+    if (!fullName.trim() || !email.trim() || !phone.trim() || !eventDate) {
+      toast.error("Complete your contact details and booking date.");
+      return;
+    }
+    if (eventEndTime <= eventStartTime) {
+      toast.error("Booking end time must be after the start time.");
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Your request could not be sent. Please try again later.");
+      return;
+    }
+    const { data, error } = await supabase.rpc("create_public_one_off_booking", {
+      p_contact_name: fullName.trim(),
+      p_contact_email: email.trim(),
+      p_contact_phone: phone.trim(),
+      p_company_name: company.trim() || fullName.trim(),
+      p_branch_name: preferredBranch,
+      p_space_name: eventPurpose.trim(),
+      p_booking_date: eventDate,
+      p_starts_at: eventStartTime,
+      p_ends_at: eventEndTime,
+      p_guests: Number.parseInt(eventGuests, 10) || 1,
+      p_notes: notes.trim() || null,
+    });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const booking = data as OneOffBookingResult;
+    setGeneratedInvoice(invoiceFromBooking(
+      booking,
+      company.trim() || fullName.trim(),
+      preferredBranch,
+      eventPurpose.trim(),
+      notes.trim(),
+    ));
+    setConfirmationOpen(true);
+    toast.success(`Booking request saved. Invoice ${booking.reference} is ready.`);
+    setFullName("");
+    setEmail("");
+    setPhone("");
+    setCompany("");
+  };
+
+  const openShowcase = (branch: (typeof live)[number]) => {
+    setShowcaseBranch(branch);
+    setShowcaseOpen(true);
+  };
+
+  const openLeadCapture = () => {
+    if (!showcaseBranch) return;
+    setPreferredBranch(showcaseBranch.name);
+    setLeadName(fullName || "");
+    setLeadCompany(company || "");
+    setLeadEmail(email || "");
+    setLeadPhone(phone || "");
+    setLeadDate(eventDate);
+    setLeadStartTime(eventStartTime);
+    setLeadEndTime(eventEndTime);
+    setLeadPurpose("Meeting room booking request");
+    setShowcaseOpen(false);
+    setLeadOpen(true);
+  };
+
+  const submitLeadRequest = async () => {
+    if (!showcaseBranch || !leadName || !leadEmail) {
+      toast.error("Please add your name and email to complete the booking request.");
+      return;
+    }
+    if (leadEndTime <= leadStartTime) {
+      toast.error("Booking end time must be after the start time.");
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Your request could not be sent. Please try again later.");
+      return;
+    }
+    const { data, error } = await supabase.rpc("create_public_one_off_booking", {
+      p_contact_name: leadName.trim(),
+      p_contact_email: leadEmail.trim(),
+      p_contact_phone: leadPhone.trim(),
+      p_company_name: leadCompany.trim() || leadName.trim(),
+      p_branch_name: showcaseBranch.name,
+      p_space_name: leadPurpose,
+      p_booking_date: leadDate,
+      p_starts_at: leadStartTime,
+      p_ends_at: leadEndTime,
+      p_guests: Number.parseInt(leadGuests, 10) || 1,
+      p_notes: notes.trim() || null,
+    });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    const booking = data as OneOffBookingResult;
+    const invoice = invoiceFromBooking(
+      booking,
+      leadCompany.trim() || leadName.trim(),
+      showcaseBranch.name,
+      leadPurpose,
+      `${leadPurpose} for ${leadGuests} guests on ${leadDate}. ${notes}`,
+    );
+
+    setGeneratedInvoice(invoice);
+    setLeadOpen(false);
+    setConfirmationOpen(true);
+    toast.success(`Thanks for your interest. Your booking-space pro forma invoice ${invoice.id} is ready to download.`);
+  };
+
+  const downloadGeneratedInvoice = () => {
+    if (!generatedInvoice) return;
+    downloadInvoicePdf(generatedInvoice);
+  };
+
+  return (
+    <section id="book-now" className="py-16 md:py-20 border-b bg-muted/30">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 grid lg:grid-cols-[1fr_1fr] gap-6 lg:gap-10">
+        <div className="card-soft p-6">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-brand font-medium mb-2">Book now</div>
+          <h2 className="font-display text-3xl md:text-4xl font-semibold">Reserve a meeting room, event space or branch tour in minutes.</h2>
+          <p className="mt-3 text-sm text-muted-foreground">This public booking flow lets non-tenants enquire for a meeting room, team workshop, boardroom, or event venue. Capture key contact details and share the date you need.</p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Full name</label>
+              <Input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Company</label>
+              <Input value={company} onChange={(event) => setCompany(event.target.value)} placeholder="Company or team" />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Email</label>
+              <Input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Phone</label>
+              <Input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="+27 ..." />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Preferred branch</label>
+              <select value={preferredBranch} onChange={(event) => setPreferredBranch(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm">
+                {live.map((branch) => <option key={branch.id} value={branch.name}>{branch.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Date needed</label>
+              <Input type="date" value={eventDate} onChange={(event) => setEventDate(event.target.value)} />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Space or purpose</label>
+              <Input value={eventPurpose} onChange={(event) => setEventPurpose(event.target.value)} />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Guests</label>
+              <Input type="number" min="1" max="1000" value={eventGuests} onChange={(event) => setEventGuests(event.target.value)} />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Start time</label>
+              <Input type="time" value={eventStartTime} onChange={(event) => setEventStartTime(event.target.value)} />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">End time</label>
+              <Input type="time" value={eventEndTime} onChange={(event) => setEventEndTime(event.target.value)} />
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Booking notes</label>
+            <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} />
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={handleSubmit} className="gap-1.5">Request booking</Button>
+            <Button asChild variant="outline"><Link to="/tour-request">Book a tour instead</Link></Button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          {live.map((branch) => (
+            <button key={branch.id} type="button" onClick={() => openShowcase(branch)} className="card-soft overflow-hidden text-left">
+              <div className="aspect-4/3 overflow-hidden">
+                <img src={branch.name === "Bryanston" ? bryanstonImg : branch.name === "Rosebank" ? rosebankImg : branch.name === "Kyalami" ? kyalamiImg : unionImg} alt={branch.name} className="h-full w-full object-cover" />
+              </div>
+              <div className="p-4">
+                <div className="font-display font-semibold">{branch.name}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{branch.city} · {branch.region}</div>
+                <div className="mt-3 flex gap-2">
+                  <div className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[10px] text-muted-foreground"><Calendar className="size-3" /> Check availability</div>
+                  <div className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[10px] text-muted-foreground"><Users className="size-3" /> Space gallery</div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Dialog open={showcaseOpen} onOpenChange={setShowcaseOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{showcaseBranch?.name ?? "Space showcase"}</DialogTitle>
+            <DialogDescription>
+              Browse a quick visual preview of this branch, check capacity and status, and request the space directly.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4">
+            <div className="aspect-video overflow-hidden rounded-lg border bg-muted/30">
+              <img src={showcaseBranch?.name === "Bryanston" ? bryanstonImg : showcaseBranch?.name === "Rosebank" ? rosebankImg : showcaseBranch?.name === "Kyalami" ? kyalamiImg : unionImg} alt={showcaseBranch?.name ?? "Branch showcase"} className="h-full w-full object-cover" />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Capacity</div>
+                <div className="mt-1 font-medium">Up to 60 guests</div>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Availability</div>
+                <div className="mt-1 font-medium">Open for this week</div>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-3">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Experience</div>
+                <div className="mt-1 font-medium">Boardroom + lounge</div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="text-sm font-medium mb-2">Space preview</div>
+              <div className="rounded-md bg-background p-3 text-sm text-muted-foreground">
+                <div className="mb-2 flex items-center gap-2"><Users className="size-4 text-brand" /> Visual tour and gallery preview for {showcaseBranch?.name ?? "this branch"}.</div>
+                <div className="mb-2 flex items-center gap-2"><Calendar className="size-4 text-brand" /> Availability details can be confirmed with the branch team.</div>
+                <div className="flex items-center gap-2"><Phone className="size-4 text-brand" /> Dedicated support for enquiries and client walkthroughs.</div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setShowcaseOpen(false)}>Close</Button>
+            <Button type="button" onClick={openLeadCapture}>Request this space</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={leadOpen} onOpenChange={setLeadOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Request this booking</DialogTitle>
+            <DialogDescription>
+              Request {showcaseBranch?.name ?? "your chosen space"}. The branch team will confirm availability; a pro-forma invoice will be created with your request.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Client name</label>
+                <Input value={leadName} onChange={(event) => setLeadName(event.target.value)} placeholder="Full name" />
+              </div>
+              <div>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Company</label>
+                <Input value={leadCompany} onChange={(event) => setLeadCompany(event.target.value)} placeholder="Company" />
+              </div>
+              <div>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Email</label>
+                <Input value={leadEmail} onChange={(event) => setLeadEmail(event.target.value)} placeholder="name@company.com" />
+              </div>
+              <div>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Phone</label>
+                <Input value={leadPhone} onChange={(event) => setLeadPhone(event.target.value)} placeholder="+27 ..." />
+              </div>
+              <div>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Guests</label>
+                <Input value={leadGuests} onChange={(event) => setLeadGuests(event.target.value)} />
+              </div>
+              <div>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Preferred date</label>
+                <Input type="date" value={leadDate} onChange={(event) => setLeadDate(event.target.value)} />
+              </div>
+              <div>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Start time</label>
+                <Input type="time" value={leadStartTime} onChange={(event) => setLeadStartTime(event.target.value)} />
+              </div>
+              <div>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">End time</label>
+                <Input type="time" value={leadEndTime} onChange={(event) => setLeadEndTime(event.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Purpose</label>
+              <Input value={leadPurpose} onChange={(event) => setLeadPurpose(event.target.value)} placeholder="Boardroom meeting, event, workshop" />
+            </div>
+            <div>
+              <label className="mb-2 block text-[11px] uppercase tracking-[0.2em] text-muted-foreground">Booking details</label>
+              <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setLeadOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={submitLeadRequest}>Create booking request</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmationOpen} onOpenChange={setConfirmationOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Thanks for your interest</DialogTitle>
+            <DialogDescription>
+              Your space request has been captured. A booking-space pro forma invoice has been generated for download, and the space is only confirmed once payment or a deposit is made.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">Invoice</span>
+              <span className="text-sm text-muted-foreground">{generatedInvoice?.id ?? "—"}</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">Status</span>
+              <span className="rounded-full bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-600">Unpaid</span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">Branch</span>
+              <span className="text-sm text-muted-foreground">{showcaseBranch?.name ?? preferredBranch}</span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="outline" onClick={() => setConfirmationOpen(false)}>Close</Button>
+            <Button type="button" onClick={downloadGeneratedInvoice}>Download pro forma invoice</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
 function Branches() {
+  const nav = useNavigate();
   const live = branches.filter(b => b.status === "live");
   const planned = branches.filter(b => b.status === "planned");
   const imgs: Record<string, string> = { Bryanston: bryanstonImg, Rosebank: rosebankImg, Kyalami: kyalamiImg, "Union Station": unionImg };
@@ -242,7 +656,7 @@ function UnionStationFeature() {
             ].map(t => <li key={t} className="flex items-start gap-2"><Check className="size-4 text-brand shrink-0 mt-0.5" /> {t}</li>)}
           </ul>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Button asChild className="gap-1.5"><Link to="/auth/sign-in">Request a quote <ArrowRight className="size-4" /></Link></Button>
+            <Button asChild className="gap-1.5"><Link to="/union-station">Book Union Station <ArrowRight className="size-4" /></Link></Button>
             <Button variant="outline">Download brochure</Button>
           </div>
         </div>
@@ -257,6 +671,7 @@ function UnionStationFeature() {
 }
 
 function Membership() {
+  const nav = useNavigate();
   const tiers = [
     { name: "Day Pass", price: "R220", period: "/day", desc: "Walk-in access, single branch.", features: ["High-speed Wi-Fi", "Café credit R30", "Meeting room booking"], cta: "Start today" },
     { name: "Flex", price: "R1,950", period: "/month", desc: "Hot desk, any branch, anytime.", features: ["All branches included", "8 meeting room hours/mo", "Community events", "Mail handling"], cta: "Most popular", featured: true },
@@ -341,6 +756,7 @@ function FAQ() {
 }
 
 function CTA() {
+  const nav = useNavigate();
   return (
     <section className="py-16 md:py-24">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">

@@ -1,44 +1,93 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { BrandLogo } from "@/components/BrandLogo";
 import { toast } from "sonner";
 import { ArrowRight, CalendarDays, Clock3, MapPin, Sparkles } from "lucide-react";
+import { getSupabaseClient } from "@/lib/supabase";
+
+type Branch = { id: string; name: string; city: string | null };
+const slotsByBranch: Record<string, string[]> = {
+  bryanston: ["09:00", "11:30", "15:00"],
+  rosebank: ["10:00", "13:00", "16:30"],
+  kyalami: ["08:30", "12:00", "14:30"],
+  "union-station": ["09:30", "12:30", "17:00"],
+};
 
 export const Route = createFileRoute("/tour-calendar")({
   head: () => ({ meta: [{ title: "Tour calendar — Office & Co WorkspaceOS" }] }),
+  validateSearch: (search: Record<string, unknown>): { leadId?: string } => ({
+    ...(typeof search.leadId === "string" ? { leadId: search.leadId } : {}),
+  }),
   component: TourCalendar,
 });
 
-const branchOptions = [
-  { id: "bryanston", name: "Bryanston", city: "Sandton", slots: ["09:00", "11:30", "15:00"] },
-  { id: "rosebank", name: "Rosebank", city: "Johannesburg", slots: ["10:00", "13:00", "16:30"] },
-  { id: "kyalami", name: "Kyalami", city: "Midrand", slots: ["08:30", "12:00", "14:30"] },
-  { id: "union", name: "Union Station", city: "CBD", slots: ["09:30", "12:30", "17:00"] },
-] as const;
-
 function TourCalendar() {
+  const { leadId } = useSearch({ from: "/tour-calendar" });
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
-  const [selectedBranch, setSelectedBranch] = useState<(typeof branchOptions)[number]["id"]>("bryanston");
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [selectedBranch, setSelectedBranch] = useState("");
   const [selectedSlot, setSelectedSlot] = useState("09:00");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const branch = useMemo(() => branchOptions.find((item) => item.id === selectedBranch) ?? branchOptions[0], [selectedBranch]);
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setLoading(false);
+      toast.error("Tour scheduling is temporarily unavailable.");
+      return;
+    }
+    void supabase
+      .from("branches")
+      .select("id,name,city")
+      .eq("status", "live")
+      .order("name")
+      .then(({ data, error }) => {
+        if (error) toast.error(error.message);
+        const availableBranches = (data ?? []) as Branch[];
+        setBranches(availableBranches);
+        setSelectedBranch(availableBranches[0]?.id ?? "");
+        setLoading(false);
+      });
+  }, []);
+
+  const branch = branches.find((item) => item.id === selectedBranch);
 
   const availableSlots = useMemo(() => {
-    const match = branchOptions.find((item) => item.id === selectedBranch);
-    return match?.slots ?? [];
-  }, [selectedBranch, branch]);
+    const slug = branch?.name.toLowerCase().replaceAll(" ", "-");
+    return slotsByBranch[slug ?? ""] ?? ["09:00", "11:30", "15:00"];
+  }, [branch]);
 
-  const confirmSelection = () => {
+  const confirmSelection = async () => {
     if (!selectedDate) {
       toast.error("Please choose a visit date.");
       return;
     }
-
-    toast.success(`Tour request saved for ${branch.name} on ${selectedDate.toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" })} at ${selectedSlot}. Our sales team will confirm shortly.`);
+    if (!leadId || !branch) {
+      toast.error("Start with the tour request form so sales can follow up with you.");
+      return;
+    }
+    const tourAt = new Date(selectedDate);
+    const [hours, minutes] = selectedSlot.split(":").map(Number);
+    tourAt.setHours(hours, minutes, 0, 0);
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setSaving(true);
+    const { error } = await supabase.rpc("schedule_website_tour", {
+      p_lead_id: leadId,
+      p_branch_id: selectedBranch,
+      p_tour_at: tourAt.toISOString(),
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(`Tour request saved for ${branch.name}. Our sales team will confirm shortly.`);
   };
 
   return (
@@ -113,22 +162,22 @@ function TourCalendar() {
                       <span className="text-xs text-muted-foreground">Tap to switch</span>
                     </div>
                     <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                      {branchOptions.map((item) => (
+                      {branches.map((item) => (
                         <button
                           key={item.id}
                           type="button"
                           onClick={() => {
                             setSelectedBranch(item.id);
-                            setSelectedSlot(item.slots[0]);
+                            setSelectedSlot(slotsByBranch[item.name.toLowerCase().replaceAll(" ", "-")]?.[0] ?? "09:00");
                           }}
                           className={`w-full rounded-2xl border px-3 py-3 text-left text-sm transition ${selectedBranch === item.id ? "border-brand bg-brand/10 text-foreground shadow-sm" : "border-border bg-background hover:border-brand/40"}`}
                         >
                           <div className="font-semibold">{item.name}</div>
-                          <div className="mt-1 text-[11px] text-muted-foreground">{item.city}</div>
+                          <div className="mt-1 text-[11px] text-muted-foreground">{item.city ?? ""}</div>
                         </button>
                       ))}
                     </div>
-                    <div className="mt-4 text-sm text-muted-foreground">{branch.city} · guided tour with sales support</div>
+                    <div className="mt-4 text-sm text-muted-foreground">{branch?.city ?? branch?.name ?? "Choose a branch"} · guided tour with sales support</div>
                   </div>
 
                   <div className="card-soft p-5">
@@ -157,7 +206,9 @@ function TourCalendar() {
                     <Sparkles className="size-4" /> What happens next
                   </div>
                   <p className="mt-3 text-sm text-muted-foreground">Confirm your visit and our sales team will contact you to finalise the tour details and prepare your branch welcome.</p>
-                  <Button className="mt-4 w-full" onClick={confirmSelection}>Confirm tour date</Button>
+                  <Button className="mt-4 w-full" onClick={confirmSelection} disabled={loading || saving || branches.length === 0}>
+                    {saving ? "Saving tour…" : "Confirm tour date"}
+                  </Button>
                 </div>
               </div>
             </div>

@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { toast } from "sonner";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth/forgot-password")({
   head: () => ({ meta: [{ title: "Forgot password — Office & Co" }] }),
@@ -12,6 +14,28 @@ export const Route = createFileRoute("/auth/forgot-password")({
 
 function Forgot() {
   const [sent, setSent] = useState(false);
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Authentication is not configured. Add the Supabase URL and anon key to the environment.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setSent(true);
+  };
+
   return (
     <AuthLayout
       eyebrow="Password reset"
@@ -20,9 +44,9 @@ function Forgot() {
       footer={<><Link to="/auth/sign-in" className="text-brand font-medium hover:underline">Back to sign in</Link></>}
     >
       {!sent ? (
-        <form onSubmit={(e) => { e.preventDefault(); setSent(true); }} className="space-y-4">
-          <div className="space-y-1.5"><Label>Email</Label><Input type="email" required placeholder="you@company.com" /></div>
-          <Button type="submit" className="w-full">Send reset link</Button>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-1.5"><Label htmlFor="reset-email">Email</Label><Input id="reset-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></div>
+          <Button type="submit" className="w-full" disabled={loading}>{loading ? "Sending…" : "Send reset link"}</Button>
         </form>
       ) : (
         <div className="space-y-3">

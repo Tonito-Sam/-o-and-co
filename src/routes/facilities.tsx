@@ -3,6 +3,8 @@ import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { spaces } from "@/lib/mock";
+import { useRole } from "@/lib/role-context";
+import { OrganizationFacilitiesView } from "@/components/tenant/OrganizationViews";
 import { DoorOpen, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/facilities")({
@@ -20,13 +22,26 @@ const typeColor: Record<string, string> = {
 };
 
 function Facilities() {
+  const { role } = useRole();
+  if (role.id === "organization-admin" || role.id === "organization-member") {
+    return <OrganizationFacilitiesView />;
+  }
+  return <AdminFacilities />;
+}
+
+function AdminFacilities() {
   return (
     <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Smart Facility Management"
         title="Spaces"
         description="Every boardroom, studio, desk and event space — live availability across the group."
-        actions={<Button size="sm" className="gap-1.5"><Plus className="size-4" />Register space</Button>}
+        actions={
+          <Button size="sm" className="gap-1.5">
+            <Plus className="size-4" />
+            Register space
+          </Button>
+        }
       />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="Total spaces" value="412" hint="Across 6 branches" />
@@ -39,18 +54,36 @@ function Facilities() {
         {spaces.map((s) => (
           <div key={s.id} className="card-soft p-5 hover:shadow-elevated transition-shadow">
             <div className="flex items-start justify-between mb-3">
-              <div className={`grid size-10 place-items-center rounded-lg ${typeColor[s.type] ?? "bg-muted"}`}>
+              <div
+                className={`grid size-10 place-items-center rounded-lg ${typeColor[s.type] ?? "bg-muted"}`}
+              >
                 <DoorOpen className="size-5" />
               </div>
-              <Badge variant={s.status === "Available" ? "default" : s.status === "In Use" ? "destructive" : "secondary"} className="text-[10px]">
-                {s.status}{s.until !== "—" && ` · until ${s.until}`}
+              <Badge
+                variant={
+                  s.status === "Available"
+                    ? "default"
+                    : s.status === "In Use"
+                      ? "destructive"
+                      : "secondary"
+                }
+                className="text-[10px]"
+              >
+                {s.status}
+                {s.until !== "—" && ` · until ${s.until}`}
               </Badge>
             </div>
             <div className="font-display text-lg font-semibold">{s.name}</div>
-            <div className="text-xs text-muted-foreground mt-0.5">{s.type} · capacity {s.capacity}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              {s.type} · capacity {s.capacity}
+            </div>
             <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">{s.branch} · Floor {s.floor}</span>
-              <Button variant="ghost" size="sm" className="h-7 text-xs">Book</Button>
+              <span className="text-muted-foreground">
+                {s.branch} · Floor {s.floor}
+              </span>
+              <Button variant="ghost" size="sm" className="h-7 text-xs">
+                Book
+              </Button>
             </div>
           </div>
         ))}

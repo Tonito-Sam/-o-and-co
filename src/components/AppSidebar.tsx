@@ -1,12 +1,39 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard, Target, Building2, DoorOpen, CalendarRange, Wallet,
-  Users, CalendarHeart, Headphones, Coffee, ShoppingBag, LifeBuoy,
-  Bell, BarChart3, Sparkles, MessageSquare, Smartphone, Landmark, Settings,
+  Activity,
+  LayoutDashboard,
+  Target,
+  Building2,
+  DoorOpen,
+  CalendarRange,
+  Wallet,
+  Users,
+  CalendarHeart,
+  Headphones,
+  Coffee,
+  ShoppingBag,
+  LifeBuoy,
+  Bell,
+  BarChart3,
+  Sparkles,
+  MessageSquare,
+  Landmark,
+  Mail,
+  Settings,
+  Radar,
+  UserRound,
 } from "lucide-react";
 import {
-  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useRole } from "@/lib/role-context";
@@ -18,6 +45,14 @@ const nav = [
       { title: "Overview", url: "/", icon: LayoutDashboard },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
       { title: "AI Assistant", url: "/ai-assistant", icon: Sparkles },
+    ],
+  },
+  {
+    label: "Prospect Intelligence",
+    items: [
+      { title: "Leads Intelligence", url: "/leads-intelligence", icon: Radar },
+      { title: "Crawler Activity", url: "/crawler-intelligence", icon: Activity },
+      { title: "Prospect Outreach", url: "/outreach", icon: Mail },
     ],
   },
   {
@@ -53,8 +88,47 @@ const nav = [
     items: [
       { title: "Messaging", url: "/messaging", icon: MessageSquare },
       { title: "Notifications", url: "/notifications", icon: Bell },
-      { title: "Member App", url: "/mobile-app", icon: Smartphone },
+      { title: "Organization", url: "/organization", icon: Building2 },
+      { title: "Account", url: "/account", icon: UserRound },
       { title: "Role Settings", url: "/settings/roles", icon: Settings },
+    ],
+  },
+];
+
+const salesManagerNav = [
+  {
+    label: "Sales Workspace",
+    items: [
+      { title: "Overview", url: "/", icon: LayoutDashboard },
+      { title: "Crawler Activity", url: "/crawler-intelligence", icon: Activity },
+      { title: "Leads Intelligence", url: "/leads-intelligence", icon: Radar },
+      { title: "Prospect Outreach", url: "/outreach", icon: Mail },
+      { title: "CRM Pipeline", url: "/crm", icon: Target },
+      { title: "Tenants", url: "/tenants", icon: Building2 },
+    ],
+  },
+  {
+    label: "Performance",
+    items: [
+      { title: "Analytics", url: "/analytics", icon: BarChart3 },
+      { title: "AI Assistant", url: "/ai-assistant", icon: Sparkles },
+    ],
+  },
+  {
+    label: "Business Development",
+    items: [
+      { title: "Events", url: "/events", icon: CalendarHeart },
+      { title: "Content Hub", url: "/content", icon: Headphones },
+      { title: "Union Station", url: "/union-station", icon: Landmark },
+      { title: "Café", url: "/cafe", icon: Coffee },
+      { title: "Marketplace", url: "/marketplace", icon: ShoppingBag },
+    ],
+  },
+  {
+    label: "Team Tools",
+    items: [
+      { title: "Messaging", url: "/messaging", icon: MessageSquare },
+      { title: "Notifications", url: "/notifications", icon: Bell },
     ],
   },
 ];
@@ -63,6 +137,13 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { role, canAccessUrl } = useRole();
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
+  const revenueGroupLabel = role.id === "tenant-admin" ? "Invoice" : "Revenue";
+  const sidebarGroups =
+    role.id === "sales-manager"
+      ? salesManagerNav
+      : nav.map((group) =>
+          group.label === "Revenue" ? { ...group, label: revenueGroupLabel } : group,
+        );
 
   return (
     <Sidebar collapsible="icon">
@@ -79,7 +160,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {nav.map((group) => {
+        {sidebarGroups.map((group) => {
           const items = group.items.filter((i) => canAccessUrl(i.url));
           if (items.length === 0) return null;
           return (
@@ -106,7 +187,9 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t">
         <div className="flex items-center gap-2.5 px-2 py-2 group-data-[collapsible=icon]:hidden">
-          <div className="grid size-8 place-items-center rounded-full bg-brand-soft text-brand font-medium text-xs">{role.initials}</div>
+          <div className="grid size-8 place-items-center rounded-full bg-brand-soft text-brand font-medium text-xs">
+            {role.initials}
+          </div>
           <div className="grid leading-tight min-w-0">
             <span className="text-xs font-medium truncate">{role.user}</span>
             <span className="text-[11px] text-muted-foreground truncate">{role.title}</span>

@@ -30,7 +30,7 @@ function Events() {
       <div className="grid md:grid-cols-2 gap-4">
         {events.map((e) => (
           <div key={e.id} className="card-soft overflow-hidden">
-            <div className="h-32 bg-gradient-to-br from-brand/30 via-brand-soft to-accent flex items-end p-4">
+            <div className="h-32 bg-linear-to-br from-brand/30 via-brand-soft to-accent flex items-end p-4">
               <Badge variant="secondary" className="bg-card/90 text-[10px]">{e.kind}</Badge>
             </div>
             <div className="p-5">

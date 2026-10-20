@@ -5,8 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-
-const TOUR_LEADS_STORAGE_KEY = "oco-tour-leads";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export const Route = createFileRoute("/tour-request")({
   head: () => ({ meta: [{ title: "Book a tour — Office & Co WorkspaceOS" }] }),
@@ -18,30 +17,29 @@ function TourRequest() {
   const [form, setForm] = useState({ fullName: "", email: "", whatsapp: "", company: "" });
   const [submitting, setSubmitting] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-
-    const lead = {
-      id: `L-${Date.now()}`,
-      contact: form.fullName.trim(),
-      email: form.email.trim(),
-      phone: form.whatsapp.trim(),
-      company: form.company.trim(),
-      source: "Website tour request",
-      stage: "New Lead",
-      submittedAt: new Date().toISOString(),
-    };
-
-    try {
-      const existing = JSON.parse(window.localStorage.getItem(TOUR_LEADS_STORAGE_KEY) ?? "[]") as typeof lead[];
-      window.localStorage.setItem(TOUR_LEADS_STORAGE_KEY, JSON.stringify([lead, ...existing]));
-    } catch {
-      window.localStorage.setItem(TOUR_LEADS_STORAGE_KEY, JSON.stringify([lead]));
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setSubmitting(false);
+      toast.error("Tour requests are temporarily unavailable. Please try again later.");
+      return;
     }
 
+    const { data: leadId, error } = await supabase.rpc("submit_website_tour_request", {
+      p_contact_name: form.fullName.trim(),
+      p_contact_email: form.email.trim(),
+      p_contact_phone: form.whatsapp.trim(),
+      p_company_name: form.company.trim(),
+    });
+    setSubmitting(false);
+    if (error || !leadId) {
+      toast.error(error?.message ?? "Could not save your tour request.");
+      return;
+    }
     toast.success("Thanks! Your tour request is received. Pick your preferred slot next.");
-    nav({ to: "/tour-calendar" });
+    nav({ to: "/tour-calendar", search: { leadId } });
   };
 
   return (

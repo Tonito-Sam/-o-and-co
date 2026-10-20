@@ -17,14 +17,7 @@ const suggestions = [
   { icon: Users, text: "What is our projected revenue next month?" },
 ];
 
-const conversation = [
-  { role: "user", text: "Which branch has the highest occupancy this month, and what's driving it?" },
-  {
-    role: "ai",
-    text: "Bryanston leads the group at 92% occupancy — 7 points above group average. Three signals are driving it: (1) Northwind Legal expanded by 8 desks in May, (2) Cape Town tour-to-close rate hit 41% vs group 34%, (3) Wine Down Friday is the most-attended internal event in the group, lifting renewal intent scores by 0.4. Recommended action: replicate the WC events calendar in Kyalami and Rosebank.",
-    facts: ["Bryanston: 92%", "Group avg: 85%", "Northwind +8 desks", "Tour→Close: 41%"],
-  },
-];
+const conversation: { role: "user" | "ai"; text: string; facts?: string[] }[] = [];
 
 function AI() {
   return (
@@ -39,7 +32,7 @@ function AI() {
           {conversation.map((m, i) => (
             <div key={i} className={`flex gap-3 ${m.role === "user" ? "justify-end" : ""}`}>
               {m.role === "ai" && (
-                <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand to-primary text-primary-foreground">
+                <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-linear-to-br from-brand to-primary text-primary-foreground">
                   <Sparkles className="size-4" />
                 </div>
               )}

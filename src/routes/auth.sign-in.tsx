@@ -4,40 +4,39 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { toast } from "sonner";
-import { demoAccounts } from "@/lib/mock";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth/sign-in")({
   head: () => ({ meta: [{ title: "Sign in — Office & Co WorkspaceOS" }] }),
   component: SignIn,
 });
 
-function signInAs(roleId: string, name: string, nav: (opts: { to: string }) => void) {
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem("woos.role", roleId);
-    window.localStorage.setItem("woos.authed", "1");
-  }
-  toast.success(`Welcome, ${name.split(" ")[0]}.`);
-  nav({ to: "/" });
-}
-
 function SignIn() {
   const nav = useNavigate();
-  const [email, setEmail] = useState("anthony@officeand.co");
-  const [password, setPassword] = useState("demo");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Authentication is not configured. Add the Supabase URL and anon key to the environment.");
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
-      const match = demoAccounts.find(a => a.email.toLowerCase() === email.trim().toLowerCase() && a.password === password);
-      setLoading(false);
-      if (!match) { toast.error("Invalid credentials. Try any demo account below."); return; }
-      signInAs(match.roleId, match.label, nav);
-    }, 500);
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Signed in successfully.");
+    nav({ to: "/" });
   };
 
   return (
@@ -55,14 +54,14 @@ function SignIn() {
         <div className="flex items-center gap-3 text-xs text-muted-foreground"><div className="flex-1 h-px bg-border" />or with email<div className="flex-1 h-px bg-border" /></div>
         <div className="space-y-1.5">
           <Label htmlFor="email">Work email</Label>
-          <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </div>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Password</Label>
             <Link to="/auth/forgot-password" className="text-xs text-brand hover:underline">Forgot password?</Link>
           </div>
-          <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox defaultChecked /> Remember me on this device
@@ -72,27 +71,6 @@ function SignIn() {
           Enterprise? <Link to="/auth/sso" className="text-brand hover:underline">Sign in with SSO</Link>
         </div>
       </form>
-
-      <div className="mt-6 rounded-lg border border-dashed bg-muted/30 p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Demo accounts</div>
-          <Badge variant="outline" className="text-[10px]">password: <span className="ml-1 font-mono">demo</span></Badge>
-        </div>
-        <p className="text-[11px] text-muted-foreground mb-3">Tap any role below to sign in and see its personalised view. No database — a lightweight front-end demo.</p>
-        <div className="grid gap-1.5">
-          {demoAccounts.map(a => (
-            <button
-              key={a.email}
-              type="button"
-              onClick={() => { setEmail(a.email); setPassword("demo"); signInAs(a.roleId, a.label, nav); }}
-              className="w-full text-left rounded-md border bg-card px-3 py-2 hover:border-brand/40 hover:bg-brand-soft/40 transition-colors"
-            >
-              <div className="text-xs font-medium">{a.label}</div>
-              <div className="text-[10px] text-muted-foreground font-mono">{a.email}</div>
-            </button>
-          ))}
-        </div>
-      </div>
     </AuthLayout>
   );
 }
