@@ -145,10 +145,10 @@ function Dashboard() {
   if (isOrganizationDashboard) {
     return <OrganizationOverview greetingState={greetingState} firstName={firstName} />;
   }
-  if (["superadmin", "group-admin", "group-ceo", "crm-manager", "finance", "branch-manager"].includes(role.id)) {
+  if (["superadmin", "group-admin", "group-ceo", "finance", "branch-manager"].includes(role.id)) {
     return <FinancialOverviewDashboard role={role} />;
   }
-  if (role.id === "sales-manager") {
+  if (["crm-manager", "sales-manager"].includes(role.id)) {
     return <SalesManagerOverview greetingState={greetingState} firstName={firstName} />;
   }
   if (["superadmin", "branch-manager", "cafe-manager", "rosebank-sales", "community-manager", "lydia-admin"].includes(role.id)) {
@@ -869,6 +869,7 @@ type SalesLeadRow = {
   id: string;
   company_name: string;
   stage: string;
+  sales_stage: string | null;
   score: number | null;
   branch_id: string | null;
   created_at: string;
@@ -921,11 +922,11 @@ function SalesManagerOverview({
         supabase
           .from("leads")
           .select("id", { count: "exact", head: true })
-          .not("stage", "in", "(won,lost)"),
+          .not("sales_stage", "in", '("Active Tenant","Lost")'),
         supabase
           .from("leads")
           .select("id", { count: "exact", head: true })
-          .eq("stage", "qualified"),
+          .eq("sales_stage", "Qualified"),
         supabase
           .from("prospect_profiles")
           .select("id", { count: "exact", head: true })
@@ -937,7 +938,7 @@ function SalesManagerOverview({
           .eq("discovery_status", "needs_review"),
         supabase
           .from("leads")
-          .select("id,company_name,stage,score,branch_id,created_at")
+          .select("id,company_name,stage,sales_stage,score,branch_id,created_at")
           .order("created_at", { ascending: false })
           .limit(6),
         supabase
@@ -1062,7 +1063,7 @@ function SalesManagerOverview({
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{lead.company_name}</div>
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {stageLabel(lead.stage)} · Score {lead.score ?? 0}
+                          {lead.sales_stage ?? stageLabel(lead.stage)} · Score {lead.score ?? 0}
                         </div>
                       </div>
                       <time className="shrink-0 text-xs text-muted-foreground">

@@ -42,6 +42,7 @@ const organizationRouteSections: Record<string, string[]> = {
   "/marketplace": ["marketplace", "shop"],
   "/support": ["support"],
 };
+const sharedOrganizationRoutes = new Set(["/community", "/cafe", "/marketplace", "/content"]);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
   const [roleId, setRoleId] = useState<RoleId>("member");
@@ -301,6 +302,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     (url: string) => {
       if (!role.nav.includes(url)) return false;
       if (role.id === "organization-admin" || role.id === "organization-member") {
+        if (sharedOrganizationRoutes.has(url)) return true;
         const requiredSections = organizationRouteSections[url];
         if (requiredSections) {
           return (organizationSections ?? []).some((section) => requiredSections.includes(section));

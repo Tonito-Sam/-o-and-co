@@ -78,7 +78,7 @@ const nav = [
     items: [
       { title: "Feed", url: "/community", icon: Users },
       { title: "Events", url: "/events", icon: CalendarHeart },
-      { title: "Content Hub", url: "/content", icon: Headphones },
+      { title: "Podcast", url: "/content", icon: Headphones },
       { title: "Café", url: "/cafe", icon: Coffee },
       { title: "Marketplace", url: "/marketplace", icon: ShoppingBag },
     ],
@@ -118,7 +118,8 @@ const salesManagerNav = [
     label: "Business Development",
     items: [
       { title: "Events", url: "/events", icon: CalendarHeart },
-      { title: "Content Hub", url: "/content", icon: Headphones },
+      { title: "Feed", url: "/community", icon: Users },
+      { title: "Podcast", url: "/content", icon: Headphones },
       { title: "Union Station", url: "/union-station", icon: Landmark },
       { title: "Café", url: "/cafe", icon: Coffee },
       { title: "Marketplace", url: "/marketplace", icon: ShoppingBag },

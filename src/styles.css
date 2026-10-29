@@ -186,6 +186,93 @@
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--organization-accent) 18%, transparent);
 }
 
+/* Shared hotspot styling for Pannellum panoramas and the current still-image tours. */
+.tour-hotspot {
+  width: 34px !important;
+  height: 34px !important;
+  border: none !important;
+  border-radius: 9999px !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(255, 255, 255, 0.25) !important;
+  transition: transform 180ms ease !important;
+  display: grid !important;
+  place-items: center !important;
+}
+
+.tour-hotspot::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #111;
+}
+
+.tour-hotspot:hover,
+.tour-stage-hotspot:hover {
+  transform: scale(1.15);
+}
+
+.tour-hotspot .pnlm-tooltip span {
+  margin-top: 6px !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  background: rgba(0, 0, 0, 0.85) !important;
+  color: #fff !important;
+  font-size: 12px !important;
+  white-space: nowrap !important;
+}
+
+.tour-stage-hotspot {
+  z-index: 15;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #111;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 4px rgba(255, 255, 255, 0.25);
+  transition: transform 180ms ease;
+}
+
+.tour-stage-hotspot:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+
+.tour-stage-hotspot > span:first-child {
+  display: grid;
+  width: 10px;
+  height: 10px;
+  place-items: center;
+  border-radius: 9999px;
+  background: #111;
+  color: #111;
+}
+
+.tour-stage-hotspot > span:first-child svg {
+  display: none;
+}
+
+.tour-stage-hotspot > span:last-child {
+  z-index: 1;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour-hotspot,
+  .tour-stage-hotspot {
+    transition: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .organization-workspace main > div {
     animation: organization-workspace-enter 360ms cubic-bezier(0.2, 0.75, 0.25, 1) both;

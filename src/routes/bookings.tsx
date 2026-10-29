@@ -68,6 +68,10 @@ const sample: {
 type OneOffBookingRequest = {
   id: string;
   branch_id: string | null;
+  request_reference: string | null;
+  request_status: string | null;
+  quote_amount_zar: number | null;
+  quote_notes: string | null;
   space_name: string | null;
   starts_at: string;
   ends_at: string;
@@ -75,10 +79,15 @@ type OneOffBookingRequest = {
   status: string;
   invoice_reference: string | null;
   branches: { name: string } | { name: string }[] | null;
+  leads: { contact_name: string; company_name: string; contact_email: string; contact_phone: string } | { contact_name: string; company_name: string; contact_email: string; contact_phone: string }[] | null;
 };
 
 function branchName(relation: OneOffBookingRequest["branches"]) {
   return Array.isArray(relation) ? relation[0]?.name : relation?.name;
+}
+
+function leadContact(relation: OneOffBookingRequest["leads"]) {
+  return Array.isArray(relation) ? relation[0] : relation;
 }
 
 function Bookings() {
@@ -94,6 +103,8 @@ function AdminBookings() {
   const [oneOffRequests, setOneOffRequests] = useState<OneOffBookingRequest[]>([]);
   const [requestError, setRequestError] = useState("");
   const [updatingRequestId, setUpdatingRequestId] = useState("");
+  const [quoteAmounts, setQuoteAmounts] = useState<Record<string, string>>({});
+  const [quoteNotes, setQuoteNotes] = useState<Record<string, string>>({});
   const [selectedBranch, setSelectedBranch] = useState<string>("Bryanston");
   const [selectedDate, setSelectedDate] = useState<string>("2026-07-18");
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null);
@@ -126,7 +137,7 @@ function AdminBookings() {
 
   const branchChoices = branches.filter((branch) => branch.status === "live");
   const canReviewOneOffRequests = [
-    "superadmin", "group-admin", "group-ceo", "crm-manager", "sales-manager", "rosebank-sales", "branch-manager",
+    "superadmin", "group-admin", "group-ceo", "crm-manager", "sales-manager", "rosebank-sales", "branch-manager", "finance",
   ].includes(role.id);
 
   const loadOneOffRequests = useCallback(async () => {
@@ -134,11 +145,11 @@ function AdminBookings() {
     if (!supabase || !canReviewOneOffRequests) return;
     let requestQuery = supabase
       .from("bookings")
-      .select("id,branch_id,space_name,starts_at,ends_at,guests,status,invoice_reference,branches(name)")
-      .not("lead_id", "is", null)
+      .select("id,branch_id,request_reference,request_status,quote_amount_zar,quote_notes,space_name,starts_at,ends_at,guests,status,invoice_reference,branches(name),leads(contact_name,company_name,contact_email,contact_phone)")
+      .not("request_status", "is", null)
       .order("starts_at", { ascending: true })
       .limit(50);
-    if (role.id === "branch-manager") {
+    if (role.id === "branch-manager" || role.id === "rosebank-sales") {
       requestQuery = requestQuery.in("branch_id", role.branchIds ?? []);
     }
     const { data, error } = await requestQuery;
@@ -157,7 +168,7 @@ function AdminBookings() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     setUpdatingRequestId(bookingId);
-    const { error } = await supabase.rpc("update_one_off_booking_status", {
+    const { data: emailToken, error } = await supabase.rpc("update_one_off_booking_status", {
       p_booking_id: bookingId,
       p_status: status,
     });
@@ -166,7 +177,46 @@ function AdminBookings() {
       toast.error(error.message);
       return;
     }
-    toast.success(status === "confirmed" ? "Booking request confirmed." : "Booking request cancelled.");
+    const { data: delivery, error: deliveryError } = await supabase.functions.invoke("deliver-booking-emails", {
+      body: { booking_id: bookingId, email_token: emailToken },
+    });
+    if (deliveryError || delivery?.failed > 0) {
+      toast.warning(status === "confirmed" ? "Booking confirmed, but customer email delivery needs attention." : "Request declined, but customer email delivery needs attention.");
+    } else {
+      toast.success(status === "confirmed" ? "Booking confirmed and customer notified." : "Request declined and customer notified.");
+    }
+    await loadOneOffRequests();
+  };
+
+  const submitOneOffQuote = async (bookingId: string) => {
+    const amount = Number.parseInt(quoteAmounts[bookingId] ?? "", 10);
+    if (!Number.isSafeInteger(amount) || amount < 1) {
+      toast.error("Enter a valid quote amount before sending it to Finance.");
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setUpdatingRequestId(bookingId);
+    const { data: emailToken, error } = await supabase.rpc("submit_one_off_booking_quote", {
+      p_booking_id: bookingId,
+      p_quote_amount_zar: amount,
+      p_quote_notes: quoteNotes[bookingId]?.trim() || null,
+    });
+    if (error) {
+      setUpdatingRequestId("");
+      toast.error(error.message);
+      return;
+    }
+    const request = oneOffRequests.find((item) => item.id === bookingId);
+    const { data: delivery, error: deliveryError } = await supabase.functions.invoke("deliver-booking-emails", {
+      body: { booking_id: bookingId, email_token: emailToken },
+    });
+    setUpdatingRequestId("");
+    if (deliveryError || delivery?.failed > 0) {
+      toast.warning("Quote sent to Finance, but the Finance email needs attention.");
+    } else {
+      toast.success(`Quote for ${request?.request_reference ?? "the request"} sent to Finance.`);
+    }
     await loadOneOffRequests();
   };
   const branchSpaces = useMemo(() => {
@@ -340,7 +390,7 @@ function AdminBookings() {
             <div>
               <h2 className="font-display text-base font-semibold">One-off booking requests</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                Public booking requests are held until the branch confirms availability.
+                Review availability, submit a price to Finance, then confirm after invoicing.
               </p>
             </div>
             <Badge variant="outline">{oneOffRequests.length}</Badge>
@@ -352,27 +402,51 @@ function AdminBookings() {
           ) : (
             <div className="divide-y">
               {oneOffRequests.map((request) => (
-                <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div key={request.id} className="grid gap-4 px-4 py-4 lg:grid-cols-[1fr_auto] lg:items-start">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{request.space_name ?? "Space request"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {branchName(request.branches) ?? "Branch not set"} · {new Date(request.starts_at).toLocaleString()}–{new Date(request.ends_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {request.guests ?? 1} guests
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold">{request.space_name ?? "Space request"}</p>
+                      <Badge variant={request.request_status === "confirmed" ? "default" : request.request_status === "declined" ? "secondary" : "outline"}>
+                        {(request.request_status ?? "pending_review").replaceAll("_", " ")}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {request.request_reference ?? "Request"} · {branchName(request.branches) ?? "Branch not set"} · {new Date(request.starts_at).toLocaleString()}–{new Date(request.ends_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {request.guests ?? 1} guests
                     </p>
-                    <p className="text-xs text-muted-foreground">Invoice {request.invoice_reference ?? "pending"}</p>
+                    {(() => {
+                      const contact = leadContact(request.leads);
+                      return contact ? <p className="mt-1 text-xs text-muted-foreground">{contact.contact_name} · {contact.company_name} · {contact.contact_email} · {contact.contact_phone}</p> : null;
+                    })()}
+                    {request.quote_amount_zar ? <p className="mt-1 text-xs font-medium">Branch quote: {formatZAR(request.quote_amount_zar)}{request.quote_notes ? ` · ${request.quote_notes}` : ""}</p> : null}
+                    {request.invoice_reference ? <p className="mt-1 text-xs text-muted-foreground">Invoice {request.invoice_reference}</p> : null}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={request.status === "confirmed" ? "default" : request.status === "held" ? "outline" : "secondary"}>
-                      {request.status === "held" ? "Awaiting confirmation" : request.status}
-                    </Badge>
-                    {request.status === "held" && (
+                  <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
+                    {request.request_status === "pending_review" && role.id !== "finance" && (
                       <>
-                        <Button size="sm" onClick={() => void updateOneOffRequest(request.id, "confirmed")} disabled={updatingRequestId === request.id}>
-                          Confirm
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => void updateOneOffRequest(request.id, "cancelled")} disabled={updatingRequestId === request.id}>
-                          Cancel
-                        </Button>
+                        <Input
+                          type="number"
+                          min="1"
+                          value={quoteAmounts[request.id] ?? ""}
+                          onChange={(event) => setQuoteAmounts((current) => ({ ...current, [request.id]: event.target.value }))}
+                          placeholder="Quote (ZAR)"
+                          aria-label={`Quote amount for ${request.request_reference ?? "booking request"}`}
+                          className="w-36"
+                        />
+                        <Input
+                          value={quoteNotes[request.id] ?? ""}
+                          onChange={(event) => setQuoteNotes((current) => ({ ...current, [request.id]: event.target.value }))}
+                          placeholder="Quote notes"
+                          aria-label={`Quote notes for ${request.request_reference ?? "booking request"}`}
+                          className="w-44"
+                        />
+                        <Button size="sm" onClick={() => void submitOneOffQuote(request.id)} disabled={updatingRequestId === request.id}>Send to Finance</Button>
+                        <Button size="sm" variant="outline" onClick={() => void updateOneOffRequest(request.id, "cancelled")} disabled={updatingRequestId === request.id}>Decline</Button>
                       </>
+                    )}
+                    {request.request_status === "invoice_sent" && role.id !== "finance" && (
+                      <Button size="sm" onClick={() => void updateOneOffRequest(request.id, "confirmed")} disabled={updatingRequestId === request.id}>
+                        Confirm booking
+                      </Button>
                     )}
                   </div>
                 </div>

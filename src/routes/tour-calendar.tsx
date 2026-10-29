@@ -18,14 +18,15 @@ const slotsByBranch: Record<string, string[]> = {
 
 export const Route = createFileRoute("/tour-calendar")({
   head: () => ({ meta: [{ title: "Tour calendar — Office & Co WorkspaceOS" }] }),
-  validateSearch: (search: Record<string, unknown>): { leadId?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { leadId?: string; branch?: string } => ({
     ...(typeof search.leadId === "string" ? { leadId: search.leadId } : {}),
+    ...(typeof search.branch === "string" ? { branch: search.branch } : {}),
   }),
   component: TourCalendar,
 });
 
 function TourCalendar() {
-  const { leadId } = useSearch({ from: "/tour-calendar" });
+  const { leadId, branch: requestedBranch } = useSearch({ from: "/tour-calendar" });
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1));
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -50,10 +51,16 @@ function TourCalendar() {
         if (error) toast.error(error.message);
         const availableBranches = (data ?? []) as Branch[];
         setBranches(availableBranches);
-        setSelectedBranch(availableBranches[0]?.id ?? "");
+        const preferredBranch = availableBranches.find((item) =>
+          item.id === requestedBranch || item.name.toLowerCase().replaceAll(" ", "-") === requestedBranch,
+        );
+        const initialBranch = preferredBranch ?? availableBranches[0];
+        setSelectedBranch(initialBranch?.id ?? "");
+        const slug = initialBranch?.name.toLowerCase().replaceAll(" ", "-");
+        setSelectedSlot(slotsByBranch[slug ?? ""]?.[0] ?? "09:00");
         setLoading(false);
       });
-  }, []);
+  }, [requestedBranch]);
 
   const branch = branches.find((item) => item.id === selectedBranch);
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,6 +38,7 @@ import {
   isSageConfigured,
 } from "@/lib/sage-api";
 import { useRole } from "@/lib/role-context";
+import { getSupabaseClient } from "@/lib/supabase";
 import { toast } from "sonner";
 import { SageStatusBanner } from "@/components/SageStatusBanner";
 import { OrganizationBillingView } from "@/components/tenant/OrganizationViews";
@@ -72,6 +73,124 @@ function Billing() {
     return <OrganizationBillingView />;
   }
   return <AdminBilling />;
+}
+
+type FinanceBookingQuote = {
+  id: string;
+  request_reference: string;
+  request_status: string;
+  invoice_reference: string | null;
+  quote_amount_zar: number;
+  quote_notes: string | null;
+  space_name: string | null;
+  starts_at: string;
+  ends_at: string;
+  guests: number | null;
+  leads: { contact_name: string; company_name: string; contact_email: string } | { contact_name: string; company_name: string; contact_email: string }[] | null;
+  branches: { name: string } | { name: string }[] | null;
+};
+
+function FinanceBookingQueue() {
+  const { role } = useRole();
+  const [requests, setRequests] = useState<FinanceBookingQuote[]>([]);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState("");
+
+  const loadRequests = useCallback(async () => {
+    if (role.id !== "finance") return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const { data, error: queryError } = await supabase
+      .from("bookings")
+      .select("id,request_reference,request_status,invoice_reference,quote_amount_zar,quote_notes,space_name,starts_at,ends_at,guests,leads(contact_name,company_name,contact_email),branches(name)")
+      .in("request_status", ["quoted", "invoice_sent", "confirmed"])
+      .order("quote_submitted_at", { ascending: true })
+      .limit(100);
+    if (queryError) setError(queryError.message);
+    else {
+      setError("");
+      setRequests((data ?? []) as FinanceBookingQuote[]);
+    }
+  }, [role.id]);
+
+  useEffect(() => {
+    void loadRequests();
+  }, [loadRequests]);
+
+  const issueInvoice = async (bookingId: string) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setBusyId(bookingId);
+    const { data, error: issueError } = await supabase.rpc("issue_one_off_booking_invoice", {
+      p_booking_id: bookingId,
+    });
+    if (issueError) {
+      setBusyId("");
+      toast.error(issueError.message);
+      return;
+    }
+    const result = data as { invoice_reference: string; email_token: string };
+    const { data: delivery, error: deliveryError } = await supabase.functions.invoke("deliver-booking-emails", {
+      body: { booking_id: bookingId, email_token: result.email_token },
+    });
+    setBusyId("");
+    if (deliveryError || delivery?.failed > 0) {
+      toast.warning(`Invoice ${result.invoice_reference} was issued, but customer email delivery needs attention.`);
+    } else {
+      toast.success(`Invoice ${result.invoice_reference} issued and emailed to the customer.`);
+    }
+    await loadRequests();
+  };
+
+  const relation = <T,>(value: T | T[] | null) => Array.isArray(value) ? value[0] : value;
+
+  if (role.id !== "finance") return null;
+
+  return (
+    <section className="mb-6 overflow-hidden rounded-lg border bg-card">
+      <div className="flex items-center justify-between gap-3 border-b p-4">
+        <div>
+          <h2 className="font-display text-base font-semibold">Booking quotes awaiting Finance</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Review branch quotes and track issued invoices.</p>
+        </div>
+        <Badge variant="outline">{requests.length}</Badge>
+      </div>
+      {error ? <p role="alert" className="p-4 text-sm text-destructive">{error}</p> : requests.length === 0 ? (
+        <p className="p-4 text-sm text-muted-foreground">No booking quotes are awaiting Finance.</p>
+      ) : (
+        <div className="divide-y">
+          {requests.map((request) => {
+            const lead = relation(request.leads);
+            const branch = relation(request.branches);
+            return (
+              <div key={request.id} className="flex flex-wrap items-center justify-between gap-4 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{request.request_reference} · {request.space_name ?? "Space request"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {branch?.name ?? "Branch"} · {lead?.contact_name ?? "Contact"} · {lead?.company_name ?? "Company"} · {lead?.contact_email ?? "Email unavailable"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {new Date(request.starts_at).toLocaleString()}–{new Date(request.ends_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {request.guests ?? 1} guests
+                    {request.quote_notes ? ` · ${request.quote_notes}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold tabular-nums">{formatZAR(request.quote_amount_zar)}</span>
+                  {request.request_status === "quoted" ? (
+                    <Button size="sm" onClick={() => void issueInvoice(request.id)} disabled={busyId === request.id}>
+                      {busyId === request.id ? "Issuing…" : "Issue invoice & email"}
+                    </Button>
+                  ) : (
+                    <Badge variant="secondary">Invoice {request.invoice_reference ?? "issued"}</Badge>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function AdminBilling() {
@@ -467,6 +586,8 @@ function AdminBilling() {
           </>
         }
       />
+
+      <FinanceBookingQueue />
 
       {canSeeRevenue ? (
         <>

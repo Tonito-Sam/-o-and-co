@@ -9,11 +9,15 @@ import { getSupabaseClient } from "@/lib/supabase";
 
 export const Route = createFileRoute("/tour-request")({
   head: () => ({ meta: [{ title: "Book a tour — Office & Co WorkspaceOS" }] }),
+  validateSearch: (search: Record<string, unknown>): { branch?: string } => ({
+    ...(typeof search.branch === "string" ? { branch: search.branch } : {}),
+  }),
   component: TourRequest,
 });
 
 function TourRequest() {
   const nav = useNavigate();
+  const { branch } = Route.useSearch();
   const [form, setForm] = useState({ fullName: "", email: "", whatsapp: "", company: "" });
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,7 +43,7 @@ function TourRequest() {
       return;
     }
     toast.success("Thanks! Your tour request is received. Pick your preferred slot next.");
-    nav({ to: "/tour-calendar", search: { leadId } });
+    nav({ to: "/tour-calendar", search: { leadId, ...(branch ? { branch } : {}) } });
   };
 
   return (
