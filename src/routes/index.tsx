@@ -60,6 +60,7 @@ import { ProductionFinanceAPI } from "@/components/finance/ProductionFinanceAPI"
 import { RoleOperationsDashboard } from "@/components/RoleOperationsDashboard";
 import { FinancialOverviewDashboard } from "@/components/FinancialOverviewDashboard";
 import { getSupabaseClient } from "@/lib/supabase";
+import { GroupExecutiveDashboard } from "@/components/GroupExecutiveDashboard";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -145,13 +146,16 @@ function Dashboard() {
   if (isOrganizationDashboard) {
     return <OrganizationOverview greetingState={greetingState} firstName={firstName} />;
   }
-  if (["superadmin", "group-admin", "group-ceo", "finance", "branch-manager"].includes(role.id)) {
+  if (role.id === "group-ceo") {
+    return <GroupExecutiveDashboard role={role} />;
+  }
+  if (["superadmin", "group-admin", "finance"].includes(role.id)) {
     return <FinancialOverviewDashboard role={role} />;
   }
   if (["crm-manager", "sales-manager"].includes(role.id)) {
     return <SalesManagerOverview greetingState={greetingState} firstName={firstName} />;
   }
-  if (["superadmin", "branch-manager", "cafe-manager", "rosebank-sales", "community-manager", "lydia-admin"].includes(role.id)) {
+  if (["branch-manager", "cafe-manager", "rosebank-sales", "community-manager", "lydia-admin"].includes(role.id)) {
     return (
       <RoleOperationsDashboard
         role={role}
@@ -1270,6 +1274,12 @@ function OrganizationOverview({
     { title: "Support", description: "Get help from Office & Co", url: "/support", icon: LifeBuoy },
   ].filter((shortcut) => canAccessUrl(shortcut.url));
 
+  const adminFocus = [
+    { label: "Upcoming bookings", value: String(activity.bookings), tone: "brand" },
+    { label: "Shop orders", value: String(activity.shopOrders), tone: "success" },
+    { label: "Open support", value: String(activity.support), tone: activity.support ? "warning" : "success" },
+  ];
+
   if (!isOrganizationAdmin) {
     const memberShortcuts = [
       {
@@ -1388,6 +1398,26 @@ function OrganizationOverview({
         </div>
       ) : (
         <>
+          <section className="mb-8 rounded-lg border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-lg font-semibold">Organization focus</h2>
+                <p className="mt-1 text-sm text-muted-foreground">The most important operational signals for your workspace this week.</p>
+              </div>
+              <Badge variant="outline">Your branch team</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {adminFocus.map(({ label, value, tone }) => (
+                <div key={label} className="rounded-md border bg-muted/20 p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+                  <p className={`mt-2 text-xl font-semibold ${tone === "warning" ? "text-warning" : tone === "success" ? "text-emerald-500" : tone === "brand" ? "text-brand" : "text-foreground"}`}>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
           <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard
               label="Upcoming bookings"

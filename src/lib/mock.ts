@@ -194,7 +194,8 @@ export const invoices: Invoice[] = [];
 
 export type InvoiceStatus =
   "Paid" | "Sent" | "Overdue" | "Draft" | "Pending verification" | "Unpaid";
-export type InvoiceMethod = "Charge to account" | "Cash on Delivery" | "Paystack" | "PayFast" | "EFT" | "—";
+export type InvoiceMethod =
+  "Charge to account" | "Cash on Delivery" | "Paystack" | "PayFast" | "EFT" | "—";
 export type InvoiceItem = { name: string; qty: number; price: number; image?: string };
 export type Invoice = {
   id: string;
@@ -326,13 +327,17 @@ export const downloadInvoicePdf = (invoice: Invoice) => {
   if (!printWindow) return;
 
   const escapeHtml = (value: string) =>
-    value.replace(/[&<>"']/g, (character) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    })[character]!);
+    value.replace(
+      /[&<>"']/g,
+      (character) =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        })[character]!,
+    );
   const bodyRows = invoice.items
     .map((item) => {
       const image = item.image
@@ -593,114 +598,6 @@ export const unionStations = [
   { id: "US-003", branch: "Union Station", name: "Boardroom Suite", revenue: 91000 },
 ];
 
-export const content = [
-  {
-    id: "M-1",
-    title: "Building a category-defining brand in Africa",
-    kind: "Podcast",
-    host: "The Co Cast · Ep. 47",
-    duration: "42 min",
-    plays: 4820,
-  },
-  {
-    id: "M-3",
-    title: "Workspace design that drives retention",
-    kind: "Video",
-    host: "Office & Co Studios",
-    duration: "12 min",
-    plays: 1640,
-  },
-  {
-    id: "M-4",
-    title: "Negotiating enterprise contracts",
-    kind: "Training",
-    host: "Sales Academy with Samantha",
-    duration: "55 min",
-    plays: 980,
-  },
-];
-
-export type EditableSiteContent = {
-  landing: {
-    title: string;
-    subtitle: string;
-    heroImage?: string;
-  };
-  about: {
-    title: string;
-    body: string;
-    banner?: string;
-  };
-  gallery?: string[];
-};
-
-const editableContentKey = "oco-editable-content";
-
-export const defaultEditableContent: EditableSiteContent = {
-  landing: {
-    title: "Office & Co — inspiring places to work",
-    subtitle: "Flexible workspaces, studios and curated tenant communities.",
-    heroImage: undefined,
-  },
-  about: {
-    title: "About Office & Co",
-    body: "Office & Co brings together thoughtfully designed workspaces and a community of ambitious companies.\nWe build places where teams do their best work.",
-    banner: undefined,
-  },
-  gallery: [],
-};
-
-export const loadEditableContent = (): EditableSiteContent => {
-  if (typeof window === "undefined") return defaultEditableContent;
-  try {
-    const raw = window.localStorage.getItem(editableContentKey);
-    if (!raw) return defaultEditableContent;
-    return JSON.parse(raw) as EditableSiteContent;
-  } catch {
-    return defaultEditableContent;
-  }
-};
-
-export const saveEditableContent = (next: EditableSiteContent) => {
-  if (typeof window !== "undefined")
-    window.localStorage.setItem(editableContentKey, JSON.stringify(next));
-  return next;
-};
-
-export type MarketplaceListing = {
-  id: string;
-  seller: string;
-  title: string;
-  price: number;
-  category: "Furniture" | "Services" | "Supplies" | "Other";
-  rating: number;
-  description?: string;
-  image?: string;
-  galleryImages?: string[];
-  listingType?: "product" | "service";
-  isPromo?: boolean;
-  salePrice?: number;
-};
-
-export const marketplace: MarketplaceListing[] = [
-  {
-    id: "MP-1",
-    seller: "Office & Co Store",
-    title: "Ergonomic standing desk",
-    price: 6890,
-    category: "Furniture",
-    rating: 4.8,
-  },
-  {
-    id: "MP-3",
-    seller: "Office & Co Store",
-    title: "Premium stationery bundle",
-    price: 480,
-    category: "Supplies",
-    rating: 4.6,
-  },
-];
-
 export const tickets: {
   id: string;
   subject: string;
@@ -931,7 +828,6 @@ export const ROLES: RoleDef[] = [
     nav: [
       "/",
       "/analytics",
-      "/ai-assistant",
       "/crm",
       "/leads-intelligence",
       "/crawler-intelligence",
@@ -959,10 +855,29 @@ export const ROLES: RoleDef[] = [
     title: "Group Administrator",
     scope: "All branches · Staff and role administration",
     nav: [
-      "/", "/analytics", "/crm", "/leads-intelligence", "/crawler-intelligence",
-      "/outreach", "/tenants", "/billing", "/facilities", "/bookings", "/union-station",
-      "/union-station-admin", "/support", "/community", "/events", "/content", "/cafe",
-      "/marketplace", "/messaging", "/notifications", "/organization", "/account", "/settings/roles",
+      "/",
+      "/analytics",
+      "/crm",
+      "/leads-intelligence",
+      "/crawler-intelligence",
+      "/outreach",
+      "/tenants",
+      "/billing",
+      "/facilities",
+      "/bookings",
+      "/union-station",
+      "/union-station-admin",
+      "/support",
+      "/community",
+      "/events",
+      "/content",
+      "/cafe",
+      "/marketplace",
+      "/messaging",
+      "/notifications",
+      "/organization",
+      "/account",
+      "/settings/roles",
     ],
     communityModules: all(true),
   },
@@ -983,7 +898,6 @@ export const ROLES: RoleDef[] = [
       "/billing",
       "/facilities",
       "/bookings",
-      "/union-station",
       "/union-station-admin",
       "/support",
       "/community",
@@ -1004,8 +918,19 @@ export const ROLES: RoleDef[] = [
     title: "Group CRM Manager",
     scope: "CRM and sales pipeline · All branches",
     nav: [
-      "/", "/crm", "/outreach", "/leads-intelligence", "/crawler-intelligence", "/community", "/content", "/cafe", "/marketplace",
-      "/tenants", "/bookings", "/analytics", "/notifications",
+      "/",
+      "/crm",
+      "/outreach",
+      "/leads-intelligence",
+      "/crawler-intelligence",
+      "/community",
+      "/content",
+      "/cafe",
+      "/marketplace",
+      "/tenants",
+      "/bookings",
+      "/analytics",
+      "/notifications",
     ],
     communityModules: {
       community: true,
@@ -1031,7 +956,6 @@ export const ROLES: RoleDef[] = [
       "/content",
       "/tenants",
       "/analytics",
-      "/ai-assistant",
       "/events",
       "/union-station",
       "/cafe",
@@ -1088,6 +1012,7 @@ export const ROLES: RoleDef[] = [
       "/tenants",
       "/facilities",
       "/bookings",
+      "/union-station",
       "/support",
       "/community",
       "/content",
@@ -1233,13 +1158,13 @@ export const ROLES: RoleDef[] = [
     initials: "NS",
     title: "External Vendor",
     scope: "Marketplace vendor access",
-    nav: ["/marketplace"],
+    nav: ["/marketplace", "/content"],
     communityModules: {
       community: false,
       events: false,
       marketplace: true,
       cafe: false,
-      content: false,
+      content: true,
     },
   },
   {
@@ -1294,7 +1219,7 @@ export const ROLES: RoleDef[] = [
     title: "Member",
     scope: "Member access",
     nav: ["/", "/notifications", "/support"],
-    communityModules: all(false),
+    communityModules: { ...all(false), content: true },
   },
 ];
 

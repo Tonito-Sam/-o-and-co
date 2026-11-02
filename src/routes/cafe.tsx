@@ -11,9 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { cafeOrders, formatZAR, branches, type CafeProduct, type Invoice, createInvoice, PAYSTACK_PUBLIC_KEY, loadInvoices, saveInvoices, downloadInvoicePdf, getRoleBranch, getRoleTenant } from "@/lib/mock";
+import { formatZAR, branches, type CafeProduct, type Invoice, createInvoice, PAYSTACK_PUBLIC_KEY, loadInvoices, saveInvoices, downloadInvoicePdf, getRoleBranch, getRoleTenant } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
-import { Coffee, Plus, ShoppingBag, Minus, Trash2, ChefHat, Store, History, ReceiptText, CreditCard, Wallet, LoaderCircle } from "lucide-react";
+import { Coffee, Plus, ShoppingBag, Minus, Trash2, ChefHat, Store, History, ReceiptText, CreditCard, Wallet, LoaderCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
 
@@ -57,7 +57,12 @@ export const Route = createFileRoute("/cafe")({
 });
 
 const liveBranches = branches.filter(b => b.status === "live").map(b => b.name);
-const columns = ["Queued", "Preparing", "Ready", "Collected"];
+const kitchenColumns = [
+  { status: "queued", label: "Queued", action: "Start preparing" },
+  { status: "preparing", label: "Preparing", action: "Mark ready" },
+  { status: "ready", label: "Ready", action: "Mark collected" },
+  { status: "collected", label: "Collected", action: null },
+];
 
 type CafeProductRow = {
   id: string;
@@ -79,7 +84,7 @@ type CafeProductRow = {
 function Cafe() {
   const { role } = useRole();
   const isCafeManager = role.id === "cafe-manager";
-  const isAdmin = ["group-ceo", "branch-manager", "cafe-manager", "community-manager", "lydia-admin"].includes(role.id);
+  const isAdmin = ["branch-manager", "cafe-manager", "community-manager", "lydia-admin"].includes(role.id);
   const defaultTab = isAdmin ? "admin" : "shop";
   const [tab, setTab] = useState(defaultTab);
   const [workBranch, setWorkBranch] = useState("");
@@ -90,6 +95,10 @@ function Cafe() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    setTab(defaultTab);
+  }, [defaultTab]);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -186,7 +195,7 @@ function Cafe() {
         {isCafeManager && !branch && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">This Café Manager account has no branch assigned. Ask an administrator to assign the correct branch before managing café stock.</p>}
         {productsError && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">Café catalog unavailable: {productsError}</p>}
         {isAdmin && <TabsContent value="admin"><AdminPanel defaultBranch={branch} canPickBranch={!isCafeManager} products={products} loading={productsLoading} onReload={() => setReloadKey((key) => key + 1)} /></TabsContent>}
-        {isAdmin && <TabsContent value="kitchen"><KitchenBoard /></TabsContent>}
+        {isAdmin && <TabsContent value="kitchen"><KitchenBoard defaultBranch={branch} canPickBranch={!isCafeManager} /></TabsContent>}
         <TabsContent value="shop"><Shop defaultBranch={shopBranch} canPickBranch={isAdmin && !isCafeManager} tenant={tenant} orderedBy={role.user} products={products} loading={productsLoading} /></TabsContent>
         <TabsContent value="orders"><MyOrders branch={branch} orderedBy={role.user} active={tab === "orders"} /></TabsContent>
       </Tabs>
@@ -460,38 +469,159 @@ function ProductDialog({ branch, initial, saving, onSave, onClose }: { branch: s
 
 // ────────────────── Kitchen board ──────────────────
 
-function KitchenBoard() {
+type CafeKitchenOrder = {
+  id: string;
+  branch_id: string;
+  item: string;
+  amount_zar: number;
+  method: string;
+  status: string;
+  organization_name: string | null;
+  purchaser_name: string | null;
+  created_at: string;
+};
+
+function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string; canPickBranch: boolean }) {
+  const [branch, setBranch] = useState(defaultBranch);
+  const [branchNames, setBranchNames] = useState<Record<string, string>>({});
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [orders, setOrders] = useState<CafeKitchenOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    setBranch(defaultBranch);
+  }, [defaultBranch]);
+
+  useEffect(() => {
+    let active = true;
+    const supabase = getSupabaseClient();
+    const loadOrders = async () => {
+      if (!supabase) {
+        setError("Supabase is not configured.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      const [orderResult, branchResult] = await Promise.all([
+        supabase
+          .from("cafe_orders")
+          .select("id,branch_id,item,amount_zar,method,status,organization_name,purchaser_name,created_at")
+          .order("created_at", { ascending: false }),
+        supabase.from("branches").select("id,name").order("name"),
+      ]);
+      if (!active) return;
+      if (orderResult.error || branchResult.error) {
+        setError(orderResult.error?.message ?? branchResult.error?.message ?? "Could not load café orders.");
+        setOrders([]);
+      } else {
+        const options = branchResult.data ?? [];
+        setBranchOptions(options);
+        setBranchNames(Object.fromEntries(options.map(({ id, name }) => [id, name])));
+        setOrders((orderResult.data ?? []) as CafeKitchenOrder[]);
+        setError("");
+      }
+      setLoading(false);
+    };
+
+    void loadOrders();
+    const interval = window.setInterval(() => void loadOrders(), 15_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [refreshKey]);
+
+  const selectedBranchId = branchOptions.find((option) => option.name === branch)?.id;
+  const branchOrders = branch
+    ? orders.filter((order) => Boolean(selectedBranchId) && order.branch_id === selectedBranchId)
+    : orders;
+  const today = new Date().toISOString().slice(0, 10);
+  const month = today.slice(0, 7);
+  const ordersToday = branchOrders.filter((order) => order.created_at.startsWith(today));
+  const ordersThisMonth = branchOrders.filter((order) => order.created_at.startsWith(month));
+  const accountOrders = ordersThisMonth.filter((order) => order.method.toLowerCase() === "charge to account").length;
+  const accountShare = ordersThisMonth.length ? `${Math.round((accountOrders / ordersThisMonth.length) * 100)}%` : "0%";
+
+  const advanceOrder = async (order: CafeKitchenOrder, nextStatus: string) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setUpdatingId(order.id);
+    const { data, error: updateError } = await supabase.rpc("advance_cafe_order_status", {
+      _order_id: order.id,
+      _next_status: nextStatus,
+    });
+    if (updateError || !data) {
+      toast.error(updateError?.message ?? "Order status could not be updated.");
+    } else {
+      setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: nextStatus } : item));
+      toast.success(`Order moved to ${nextStatus}.`);
+    }
+    setUpdatingId(null);
+  };
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Orders today" value="187" delta="▲ 14" accent="brand" />
-        <StatCard label="Café revenue (mo)" value={formatZAR(284_000)} accent="success" />
-        <StatCard label="Charge to account" value="62%" hint="of all orders" />
-        <StatCard label="Avg prep time" value="4.2 min" />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <label className="mb-1.5 block text-xs font-medium">Kitchen branch</label>
+          {canPickBranch ? (
+            <Select value={branch} onValueChange={setBranch}>
+              <SelectTrigger className="w-55"><SelectValue placeholder="Select branch" /></SelectTrigger>
+              <SelectContent>{branchOptions.map((option) => <SelectItem key={option.id} value={option.name}>{option.name}</SelectItem>)}</SelectContent>
+            </Select>
+          ) : <Badge variant="outline" className="h-9 px-3">{branch || "No branch assigned"}</Badge>}
+        </div>
+        <Button type="button" size="sm" variant="outline" className="gap-1.5" disabled={loading} onClick={() => setRefreshKey((key) => key + 1)}>
+          <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />Refresh
+        </Button>
       </div>
-      <div className="grid md:grid-cols-4 gap-3">
-        {columns.map((col) => (
-          <div key={col} className="rounded-xl bg-muted/40 p-3">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-xs font-semibold uppercase tracking-wider text-foreground/70">{col}</div>
-              <Badge variant="outline" className="text-[10px]">{cafeOrders.filter(o => o.status === col).length}</Badge>
-            </div>
-            <div className="space-y-2">
-              {cafeOrders.filter(o => o.status === col).map(o => (
-                <div key={o.id} className="card-soft p-3">
-                  <div className="flex items-start gap-2">
-                    <div className="grid size-8 place-items-center rounded-md bg-warning/15 text-warning shrink-0"><Coffee className="size-4" /></div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium leading-tight">{o.item}</div>
-                      <div className="text-[11px] text-muted-foreground mt-0.5">{o.member} · {o.tenant}</div>
-                      <div className="text-[10px] mt-1 text-brand">{o.method}</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <StatCard label="Orders today" value={String(ordersToday.length)} accent="brand" />
+        <StatCard label="Café revenue (month)" value={formatZAR(ordersThisMonth.reduce((sum, order) => sum + Number(order.amount_zar), 0))} accent="success" />
+        <StatCard label="Charge to account" value={accountShare} hint="of this month's orders" />
+      </div>
+      {error && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">Kitchen orders unavailable: {error}</p>}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {kitchenColumns.map((column) => {
+          const columnOrders = branchOrders.filter((order) => order.status.toLowerCase() === column.status);
+          return (
+            <div key={column.status} className="rounded-lg bg-muted/40 p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-xs font-semibold uppercase tracking-wider text-foreground/70">{column.label}</div>
+                <Badge variant="outline" className="text-[10px]">{columnOrders.length}</Badge>
+              </div>
+              <div className="space-y-2">
+                {loading && orders.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-muted-foreground">Loading orders…</p>
+                ) : columnOrders.map((order) => (
+                  <div key={order.id} className="card-soft space-y-3 p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="grid size-8 shrink-0 place-items-center rounded-md bg-warning/15 text-warning"><Coffee className="size-4" /></div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium leading-tight">{order.item}</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">{order.purchaser_name || order.organization_name || "Café customer"} · {branchNames[order.branch_id] ?? "Unknown branch"}</div>
+                        <div className="mt-1 flex justify-between gap-2 text-[10px] text-brand">
+                          <span>{order.method}</span>
+                          <span>{formatZAR(Number(order.amount_zar))} · {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                      </div>
                     </div>
+                    {column.action && (
+                      <Button type="button" size="sm" variant="outline" className="h-7 w-full" disabled={updatingId === order.id} onClick={() => void advanceOrder(order, kitchenColumns[kitchenColumns.findIndex((item) => item.status === column.status) + 1].status)}>
+                        {updatingId === order.id ? "Updating…" : column.action}
+                      </Button>
+                    )}
                   </div>
-                </div>
-              ))}
+                ))}
+                {!loading && !error && columnOrders.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">No orders</p>}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

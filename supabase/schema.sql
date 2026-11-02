@@ -74,7 +74,7 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (
     select 1 from public.user_roles
     where user_id = _user_id
-      and role::text in ('superadmin', 'group_admin', 'group_ceo', 'crm_manager', 'sales_manager')
+      and role::text in ('superadmin', 'group_admin', 'group_ceo', 'crm_manager', 'sales_manager', 'finance')
   );
 $$;
 revoke all on function public.is_global_crm_staff(uuid) from public;
@@ -207,6 +207,35 @@ create policy tenants_admin_write on public.tenants for all to authenticated usi
 create index if not exists idx_tenants_branch on public.tenants(branch_id);
 create trigger trg_tenants_touch before update on public.tenants for each row execute function public.touch_updated_at();
 
+create or replace function public.enforce_branch_manager_tenant_scope()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if public.has_role(auth.uid(), 'branch_manager')
+    and not (
+      public.has_role(auth.uid(), 'superadmin')
+      or public.has_role(auth.uid(), 'group_admin')
+      or public.has_role(auth.uid(), 'group_ceo')
+      or public.has_role(auth.uid(), 'crm_manager')
+      or public.has_role(auth.uid(), 'sales_manager')
+      or public.has_role(auth.uid(), 'finance')
+    )
+    and not exists (
+      select 1 from public.user_roles
+      where user_id = auth.uid()
+        and role = 'branch_manager'
+        and branch_id = new.branch_id
+    ) then
+    raise exception 'Branch Managers can only manage tenant records for their assigned branches.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_tenants_branch_manager_scope on public.tenants;
+create trigger trg_tenants_branch_manager_scope
+  before insert or update of branch_id on public.tenants
+  for each row execute function public.enforce_branch_manager_tenant_scope();
+
 create table if not exists public.employees (
   id          uuid primary key default gen_random_uuid(),
   tenant_id   uuid not null references public.tenants(id) on delete cascade,
@@ -259,6 +288,7 @@ create table if not exists public.rooms (
   branch_id     uuid not null references public.branches(id) on delete cascade,
   code          text,
   name          text not null,
+  floor         int,
   kind          text not null,
   capacity      int not null default 1,
   hourly_zar    int default 0,
@@ -448,8 +478,16 @@ drop policy if exists events_public_read on public.events;
 drop policy if exists events_staff_write on public.events;
 create policy events_public_read on public.events for select using (status = 'published' or auth.role() = 'authenticated');
 create policy events_staff_write on public.events for all to authenticated using (
-  public.has_role(auth.uid(),'community_manager') or public.has_role(auth.uid(),'branch_manager') or public.has_role(auth.uid(),'group_ceo')
-) with check (true);
+  public.has_role(auth.uid(),'community_manager')
+  or public.has_role(auth.uid(),'group_ceo')
+  or public.is_platform_admin(auth.uid())
+  or public.is_branch_manager(auth.uid(), branch_id)
+) with check (
+  public.has_role(auth.uid(),'community_manager')
+  or public.has_role(auth.uid(),'group_ceo')
+  or public.is_platform_admin(auth.uid())
+  or public.is_branch_manager(auth.uid(), branch_id)
+);
 create index if not exists idx_events_starts on public.events(starts_at);
 create trigger trg_events_touch before update on public.events for each row execute function public.touch_updated_at();
 
@@ -615,9 +653,13 @@ create policy cafe_self on public.cafe_orders for all to authenticated using (pr
 create table if not exists public.marketplace_listings (
   id         uuid primary key default gen_random_uuid(),
   seller_id  uuid references public.profiles(id),
+  seller_name text,
   title      text not null,
   category   text,
+  listing_type text not null default 'product',
   price_zar  int default 0,
+  description text,
+  image_url  text,
   rating     numeric(3,2) default 0,
   is_active  boolean default true,
   created_at timestamptz not null default now()
@@ -649,7 +691,9 @@ alter table public.content_items enable row level security;
 drop policy if exists content_public_read on public.content_items;
 create policy content_public_read on public.content_items for select using (published);
 drop policy if exists content_staff_write on public.content_items;
-create policy content_staff_write on public.content_items for all to authenticated using (public.has_role(auth.uid(),'community_manager') or public.has_role(auth.uid(),'group_ceo')) with check (true);
+create policy content_staff_write on public.content_items for all to authenticated
+  using (public.has_role(auth.uid(),'community_manager') or public.has_role(auth.uid(),'group_ceo') or public.has_role(auth.uid(),'branch_manager'))
+  with check (public.has_role(auth.uid(),'community_manager') or public.has_role(auth.uid(),'group_ceo') or public.has_role(auth.uid(),'branch_manager'));
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- 11. SUPPORT

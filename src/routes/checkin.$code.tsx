@@ -85,7 +85,7 @@ function CheckIn() {
     setDone(true);
   };
 
-  if (loading || (error && !event)) {
+  if (loading || !event) {
     return (
       <div className="min-h-screen grid place-items-center px-4">
         <div className="max-w-md text-center">
@@ -244,7 +244,7 @@ function CheckIn() {
           </div>
 
           <div className="text-center mt-4 text-[11px] text-muted-foreground">
-            Access code <code className="font-mono">{event.code}</code>
+            Access code <code className="font-mono">{code}</code>
           </div>
         </div>
       </main>

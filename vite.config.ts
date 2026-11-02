@@ -8,7 +8,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   vite: {
-    base: "/",
+    base: process.env.NODE_ENV === "production" ? "https://oandco.ggempire.co.za/" : "/",
     envPrefix: ["VITE_", "PUBLIC_URL", "PUBLISHABLE_KEY", "SUPABASE_PUBLIC_ANON_KEY"],
     resolve: {
       tsconfigPaths: true,
@@ -18,6 +18,7 @@ export default defineConfig({
       chunkSizeWarningLimit: 700,
     },
     server: {
+      host: "localhost",
       port: 3005,
       strictPort: true,
     },

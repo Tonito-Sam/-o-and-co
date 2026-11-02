@@ -277,6 +277,33 @@ export function RoleOperationsDashboard({
 
   if (!config) return null;
 
+  const availableSpaces = snapshot.availableOffices + snapshot.availableDesks;
+  const totalSpaces = snapshot.totalOffices + snapshot.totalDesks;
+  const focusHighlights =
+    role.id === "branch-manager"
+      ? [
+          { label: "Space availability", value: `${availableSpaces} / ${totalSpaces}`, tone: "success" },
+          { label: "Open issues", value: String(snapshot.openTickets), tone: snapshot.openTickets ? "warning" : "success" },
+          { label: "Booking activity", value: String(snapshot.upcomingBookings), tone: "brand" },
+        ]
+      : role.id === "cafe-manager"
+        ? [
+            { label: "Menu items", value: String(snapshot.activeCafeProducts), tone: "brand" },
+            { label: "Restock alerts", value: String(snapshot.lowStockCafeProducts), tone: snapshot.lowStockCafeProducts ? "warning" : "success" },
+            { label: "Assigned branch", value: branchName ?? "N/A", tone: "default" },
+          ]
+        : role.id === "community-manager"
+          ? [
+              { label: "Published events", value: String(snapshot.upcomingEvents.length), tone: "brand" },
+              { label: "Pending posts", value: String(snapshot.pendingPosts), tone: snapshot.pendingPosts ? "warning" : "success" },
+              { label: "Branch", value: branchName ?? "N/A", tone: "default" },
+            ]
+          : [
+              { label: "Upcoming venue events", value: String(snapshot.upcomingEvents.length), tone: "brand" },
+              { label: "Workflow status", value: "Open", tone: "success" },
+              { label: "Venue", value: branchName ?? "N/A", tone: "default" },
+            ];
+
   const greeting = (
     <PageHeader
       eyebrow={`${role.title} · ${greetingState.dateLabel}`}
@@ -319,8 +346,6 @@ export function RoleOperationsDashboard({
   const isCafeManager = role.id === "cafe-manager";
   const isRosebankSales = role.id === "rosebank-sales";
   const isCommunityManager = role.id === "community-manager";
-  const availableSpaces = snapshot.availableOffices + snapshot.availableDesks;
-  const totalSpaces = snapshot.totalOffices + snapshot.totalDesks;
 
   return (
     <div className="mx-auto max-w-350">
@@ -330,6 +355,26 @@ export function RoleOperationsDashboard({
         <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading branch activity</div>
       ) : (
         <>
+          <section className="mb-8 rounded-lg border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-lg font-semibold">Priority focus</h2>
+                <p className="mt-1 text-sm text-muted-foreground">The main items to review for this workspace today.</p>
+              </div>
+              <Badge variant="outline">{role.title}</Badge>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {focusHighlights.map(({ label, value, tone }) => (
+                <div key={label} className="rounded-md border bg-muted/20 p-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
+                  <p className={`mt-2 text-xl font-semibold ${tone === "warning" ? "text-warning" : tone === "success" ? "text-emerald-500" : tone === "brand" ? "text-brand" : "text-foreground"}`}>
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+
           {isBranchManager ? (
             <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-4">
               <StatCard label="Available spaces" value={`${availableSpaces} / ${totalSpaces}`} hint="Offices and desks" accent="success" />

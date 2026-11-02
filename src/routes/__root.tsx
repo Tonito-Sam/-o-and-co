@@ -30,6 +30,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { RoleProvider, useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
 import { LoaderCircle } from "lucide-react";
+import { WorkspaceAssistantWidget } from "@/routes/ai-assistant";
 
 function NotFoundComponent() {
   return (
@@ -245,6 +246,10 @@ function AuthenticatedWorkspace({
   onSidebarOpenChange: (open: boolean) => void;
 }) {
   const { role, isLoading } = useRole();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const showFloatingAssistant =
+    pathname === "/" &&
+    ["group-ceo", "branch-manager", "sales-manager", "crm-manager"].includes(role.id);
   const isOrganizationWorkspace =
     role.id === "organization-admin" || role.id === "organization-member";
 
@@ -277,6 +282,7 @@ function AuthenticatedWorkspace({
           <MobileBottomNav />
         </div>
       </div>
+      {showFloatingAssistant && <WorkspaceAssistantWidget />}
       <Toaster />
     </SidebarProvider>
   );

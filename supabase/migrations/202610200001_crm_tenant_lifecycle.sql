@@ -467,7 +467,8 @@ create trigger trg_capture_organization_resource_booking_lead
 after insert on public.branch_resource_bookings
 for each row execute function public.capture_organization_resource_booking_lead();
 
-create or replace function public.update_one_off_booking_status(p_booking_id uuid, p_status text)
+drop function if exists public.update_one_off_booking_status(uuid, text);
+create function public.update_one_off_booking_status(p_booking_id uuid, p_status text)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.is_office_co_staff(auth.uid()) then raise exception 'Only Office & Co staff can update booking requests.'; end if;

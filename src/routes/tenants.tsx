@@ -1,6 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Building2, ExternalLink, FileSignature, FileUp, LoaderCircle, Plus, Search } from "lucide-react";
+import {
+  Building2,
+  ExternalLink,
+  FileSignature,
+  FileUp,
+  LoaderCircle,
+  Plus,
+  Search,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +23,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { getSupabaseClient } from "@/lib/supabase";
 import { useRole } from "@/lib/role-context";
 
@@ -45,7 +59,7 @@ function one<T>(relation: Relation<T>): T | null {
 
 function localDate() {
   return new Intl.DateTimeFormat("en-CA").format(new Date());
-};
+}
 
 function parseCsv(text: string) {
   const rows: string[][] = [];
@@ -100,6 +114,12 @@ export const Route = createFileRoute("/tenants")({
 
 function Tenants() {
   const { role } = useRole();
+  const isBranchManager = role.id === "branch-manager";
+  const assignedBranchIds = useMemo(() => role.branchIds ?? [], [role.branchIds]);
+  const assignedBranchNames = useMemo(
+    () => (role.branchNames?.length ? role.branchNames : role.branch ? [role.branch] : []),
+    [role.branch, role.branchNames],
+  );
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [branches, setBranches] = useState<BranchRow[]>([]);
   const [search, setSearch] = useState("");
@@ -119,7 +139,16 @@ function Tenants() {
   const [mrr, setMrr] = useState("0");
   const [since, setSince] = useState(localDate);
   const [leaseSignedAt, setLeaseSignedAt] = useState(localDate);
-  const canManage = ["superadmin", "group-admin", "group-ceo", "crm-manager", "sales-manager", "rosebank-sales", "finance"].includes(role.id);
+  const canManage = [
+    "superadmin",
+    "group-admin",
+    "group-ceo",
+    "crm-manager",
+    "sales-manager",
+    "rosebank-sales",
+    "finance",
+    "branch-manager",
+  ].includes(role.id);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -130,32 +159,64 @@ function Tenants() {
     }
 
     let active = true;
-    void Promise.all([
-      supabase
+    const loadTenants = async () => {
+      const branchResult = await supabase
+        .from("branches")
+        .select("id,name")
+        .eq("status", "live")
+        .order("name");
+      if (!active) return;
+      if (branchResult.error) {
+        setError(branchResult.error.message);
+        setTenants([]);
+        setBranches([]);
+        setLoading(false);
+        return;
+      }
+
+      const allBranches = (branchResult.data ?? []) as BranchRow[];
+      const assignedNames = new Set(assignedBranchNames.map((name) => name.trim().toLowerCase()));
+      const allowedBranches = isBranchManager
+        ? allBranches.filter(
+            (branch) =>
+              assignedBranchIds.includes(branch.id) ||
+              assignedNames.has(branch.name.trim().toLowerCase()),
+          )
+        : allBranches;
+      setBranches(allowedBranches);
+      const allowedBranchIds = allowedBranches.map((branch) => branch.id);
+      if (isBranchManager && allowedBranchIds.length === 0) {
+        setError("No branch is assigned to this Branch Manager account.");
+        setTenants([]);
+        setLoading(false);
+        return;
+      }
+
+      let tenantQuery = supabase
         .from("tenants")
         .select(
           "id,organization_id,company_id,branch_id,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)",
         )
         .eq("status", "active")
-        .order("since", { ascending: false }),
-      supabase.from("branches").select("id,name").eq("status", "live").order("name"),
-    ]).then(([tenantResult, branchResult]) => {
+        .order("since", { ascending: false });
+      if (isBranchManager) tenantQuery = tenantQuery.in("branch_id", allowedBranchIds);
+      const tenantResult = await tenantQuery;
       if (!active) return;
-      const queryError = tenantResult.error ?? branchResult.error;
-      if (queryError) {
-        setError(queryError.message);
+      if (tenantResult.error) {
+        setError(tenantResult.error.message);
         setTenants([]);
       } else {
         setTenants((tenantResult.data ?? []) as TenantRow[]);
-        setBranches((branchResult.data ?? []) as BranchRow[]);
+        setError("");
       }
       setLoading(false);
-    });
+    };
+    void loadTenants();
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [assignedBranchIds, assignedBranchNames, isBranchManager]);
 
   const filteredTenants = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -215,11 +276,19 @@ function Tenants() {
     setImportDialogOpen(false);
     setLegacyName("");
     resetLeaseForm();
-    const { data, error: reloadError } = await supabase
+    let reloadQuery = supabase
       .from("tenants")
-      .select("id,organization_id,company_id,branch_id,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)")
+      .select(
+        "id,organization_id,company_id,branch_id,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)",
+      )
       .eq("status", "active")
       .order("since", { ascending: false });
+    if (isBranchManager)
+      reloadQuery = reloadQuery.in(
+        "branch_id",
+        branches.map((item) => item.id),
+      );
+    const { data, error: reloadError } = await reloadQuery;
     if (reloadError) toast.error(reloadError.message);
     else setTenants((data ?? []) as TenantRow[]);
   };
@@ -239,23 +308,47 @@ function Tenants() {
       toast.error("The CSV needs a header row and at least one tenant row.");
       return;
     }
-    const headers = parsed[0].map((header) => header.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
-    const records = parsed.slice(1).map((values) =>
-      Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])),
+    const headers = parsed[0].map((header) =>
+      header
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, ""),
     );
-    const rows = records.map((record) => ({
-      organization_name: csvValue(record, "organization_name", "company_name", "company", "organization", "tenant", "name"),
-      branch: csvValue(record, "branch", "branch_name", "location"),
-      tier: csvValue(record, "tier", "subscription_tier", "membership_tier")
-        .toLowerCase().replace(/[ -]+/g, "_"),
-      plan_name: csvValue(record, "plan_name", "plan"),
-      desks: csvInteger(csvValue(record, "desks", "desk_count", "workspace_count")),
-      mrr_zar: csvInteger(csvValue(record, "mrr_zar", "monthly_fee", "monthly_rent", "mrr")),
-      since: csvValue(record, "since", "lease_start", "lease_start_date", "start_date"),
-      lease_signed_at: csvValue(record, "lease_signed_at", "signed_at", "lease_signed", "signature_date"),
-      website: csvValue(record, "website", "website_url"),
-      industry: csvValue(record, "industry"),
-    })).filter((record) => Object.values(record).some(Boolean));
+    const records = parsed
+      .slice(1)
+      .map((values) =>
+        Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])),
+      );
+    const rows = records
+      .map((record) => ({
+        organization_name: csvValue(
+          record,
+          "organization_name",
+          "company_name",
+          "company",
+          "organization",
+          "tenant",
+          "name",
+        ),
+        branch: csvValue(record, "branch", "branch_name", "location"),
+        tier: csvValue(record, "tier", "subscription_tier", "membership_tier")
+          .toLowerCase()
+          .replace(/[ -]+/g, "_"),
+        plan_name: csvValue(record, "plan_name", "plan"),
+        desks: csvInteger(csvValue(record, "desks", "desk_count", "workspace_count")),
+        mrr_zar: csvInteger(csvValue(record, "mrr_zar", "monthly_fee", "monthly_rent", "mrr")),
+        since: csvValue(record, "since", "lease_start", "lease_start_date", "start_date"),
+        lease_signed_at: csvValue(
+          record,
+          "lease_signed_at",
+          "signed_at",
+          "lease_signed",
+          "signature_date",
+        ),
+        website: csvValue(record, "website", "website_url"),
+        industry: csvValue(record, "industry"),
+      }))
+      .filter((record) => Object.values(record).some(Boolean));
     if (rows.length > 500) {
       toast.error("Import at most 500 tenants per CSV file.");
       return;
@@ -277,15 +370,30 @@ function Tenants() {
       toast.error(importError.message);
       return;
     }
-    const result = data as { imported: number; errors: { row: number; organization_name: string; error: string }[] };
-    const errors = result.errors.map((item) => `Row ${item.row}: ${item.organization_name || "Unnamed tenant"} · ${item.error}`);
+    const result = data as {
+      imported: number;
+      errors: { row: number; organization_name: string; error: string }[];
+    };
+    const errors = result.errors.map(
+      (item) => `Row ${item.row}: ${item.organization_name || "Unnamed tenant"} · ${item.error}`,
+    );
     setCsvErrors(errors);
-    toast.success(`${result.imported} tenant${result.imported === 1 ? "" : "s"} imported${errors.length ? ` · ${errors.length} need attention` : ""}.`);
-    const { data: tenantData, error: reloadError } = await supabase
+    toast.success(
+      `${result.imported} tenant${result.imported === 1 ? "" : "s"} imported${errors.length ? ` · ${errors.length} need attention` : ""}.`,
+    );
+    let reloadQuery = supabase
       .from("tenants")
-      .select("id,organization_id,company_id,branch_id,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)")
+      .select(
+        "id,organization_id,company_id,branch_id,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)",
+      )
       .eq("status", "active")
       .order("since", { ascending: false });
+    if (isBranchManager)
+      reloadQuery = reloadQuery.in(
+        "branch_id",
+        branches.map((item) => item.id),
+      );
+    const { data: tenantData, error: reloadError } = await reloadQuery;
     if (reloadError) toast.error(reloadError.message);
     else setTenants((tenantData ?? []) as TenantRow[]);
     if (errors.length === 0) {
@@ -301,24 +409,29 @@ function Tenants() {
         eyebrow="Lease Account Management"
         title="Tenants"
         description="Organizations with an active signed lease. Event and other one-off bookings remain bookings, not tenancies."
-        actions={canManage ? (
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => {
-              setBranchId("");
-              setTier("");
-              setSince("");
-              setLeaseSignedAt("");
-              setImportDialogOpen(true);
-            }}>
-              <Plus className="size-4" />
-              Import existing tenant
-            </Button>
-            <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
-              <FileUp className="size-4" />
-              Import tenant leases (CSV)
-            </Button>
-          </div>
-        ) : undefined}
+        actions={
+          canManage ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setBranchId("");
+                  setTier("");
+                  setSince("");
+                  setLeaseSignedAt("");
+                  setImportDialogOpen(true);
+                }}
+              >
+                <Plus className="size-4" />
+                Import existing tenant
+              </Button>
+              <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
+                <FileUp className="size-4" />
+                Import tenant leases (CSV)
+              </Button>
+            </div>
+          ) : undefined
+        }
       />
 
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -332,7 +445,8 @@ function Tenants() {
           <div>
             <h2 className="font-display text-base font-semibold">Active leases</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Lease records are created separately from organization registration and event bookings.
+              Lease records are created separately from organization registration and event
+              bookings.
             </p>
           </div>
           <div className="relative sm:w-72">
@@ -364,7 +478,9 @@ function Tenants() {
         ) : filteredTenants.length === 0 ? (
           <div className="px-5 py-14 text-center">
             <FileSignature className="mx-auto size-8 text-muted-foreground/60" />
-            <h3 className="mt-3 font-medium">{tenants.length ? "No leases match" : "No active leases yet"}</h3>
+            <h3 className="mt-3 font-medium">
+              {tenants.length ? "No leases match" : "No active leases yet"}
+            </h3>
             <p className="mx-auto mt-1 max-w-lg text-sm text-muted-foreground">
               {tenants.length
                 ? "Try another organization, branch, or plan."
@@ -390,48 +506,48 @@ function Tenants() {
                   const company = one(tenant.companies);
                   const branch = one(tenant.branches);
                   return (
-                  <tr key={tenant.id} className="align-middle hover:bg-muted/20">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="grid size-8 shrink-0 place-items-center rounded-md bg-brand-soft text-brand">
-                          <Building2 className="size-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">
-                            {organization?.name ?? company?.name ?? "Unnamed tenant"}
+                    <tr key={tenant.id} className="align-middle hover:bg-muted/20">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="grid size-8 shrink-0 place-items-center rounded-md bg-brand-soft text-brand">
+                            <Building2 className="size-4" />
                           </div>
-                          {organization?.website && (
-                            <a
-                              href={organization.website}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex max-w-64 items-center gap-1 truncate text-xs text-brand hover:underline"
-                            >
-                              {organization.website}
-                              <ExternalLink className="size-3 shrink-0" />
-                            </a>
-                          )}
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium">
+                              {organization?.name ?? company?.name ?? "Unnamed tenant"}
+                            </div>
+                            {organization?.website && (
+                              <a
+                                href={organization.website}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex max-w-64 items-center gap-1 truncate text-xs text-brand hover:underline"
+                              >
+                                {organization.website}
+                                <ExternalLink className="size-3 shrink-0" />
+                              </a>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm">{branch?.name ?? "Branch not set"}</td>
-                    <td className="px-4 py-3 text-sm">
-                      {tenant.plan_name ?? tenant.tier.replaceAll("_", " ")}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm tabular-nums">
-                      {tenant.desks ?? 0}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm tabular-nums">
-                      R {new Intl.NumberFormat("en-ZA").format(tenant.mrr_zar ?? 0)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {tenant.since
-                        ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(
-                            new Date(`${tenant.since}T00:00:00`),
-                          )
-                        : "Not set"}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-4 py-3 text-sm">{branch?.name ?? "Branch not set"}</td>
+                      <td className="px-4 py-3 text-sm">
+                        {tenant.plan_name ?? tenant.tier.replaceAll("_", " ")}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums">
+                        {tenant.desks ?? 0}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm tabular-nums">
+                        R {new Intl.NumberFormat("en-ZA").format(tenant.mrr_zar ?? 0)}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {tenant.since
+                          ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(
+                              new Date(`${tenant.since}T00:00:00`),
+                            )
+                          : "Not set"}
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -445,28 +561,43 @@ function Tenants() {
           <DialogHeader>
             <DialogTitle>Import an existing tenant</DialogTitle>
             <DialogDescription>
-              Add a current lease from your existing tenant roster. Matching registered organizations are linked automatically; no portal account is required.
+              Add a current lease from your existing tenant roster. Matching registered
+              organizations are linked automatically; no portal account is required.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={importExistingTenant} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="legacy-tenant-name">Organization or company name</Label>
-              <Input id="legacy-tenant-name" required minLength={2} value={legacyName} onChange={(event) => setLegacyName(event.target.value)} />
+              <Input
+                id="legacy-tenant-name"
+                required
+                minLength={2}
+                value={legacyName}
+                onChange={(event) => setLegacyName(event.target.value)}
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="legacy-tenant-branch">Branch</Label>
                 <Select value={branchId} onValueChange={setBranchId}>
-                  <SelectTrigger id="legacy-tenant-branch"><SelectValue placeholder="Choose branch" /></SelectTrigger>
+                  <SelectTrigger id="legacy-tenant-branch">
+                    <SelectValue placeholder="Choose branch" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {branches.map((branch) => <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>)}
+                    {branches.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="legacy-tenant-tier">Plan tier</Label>
                 <Select value={tier} onValueChange={setTier}>
-                  <SelectTrigger id="legacy-tenant-tier"><SelectValue placeholder="Choose tier" /></SelectTrigger>
+                  <SelectTrigger id="legacy-tenant-tier">
+                    <SelectValue placeholder="Choose tier" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="day_pass">Day pass</SelectItem>
                     <SelectItem value="flex">Flex</SelectItem>
@@ -479,32 +610,69 @@ function Tenants() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="legacy-tenant-plan">Plan name</Label>
-              <Input id="legacy-tenant-plan" value={planName} onChange={(event) => setPlanName(event.target.value)} />
+              <Input
+                id="legacy-tenant-plan"
+                value={planName}
+                onChange={(event) => setPlanName(event.target.value)}
+              />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="legacy-tenant-desks">Desks</Label>
-                <Input id="legacy-tenant-desks" type="number" min="0" step="1" required value={desks} onChange={(event) => setDesks(event.target.value)} />
+                <Input
+                  id="legacy-tenant-desks"
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={desks}
+                  onChange={(event) => setDesks(event.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="legacy-tenant-mrr">Monthly fee (ZAR)</Label>
-                <Input id="legacy-tenant-mrr" type="number" min="0" step="1" required value={mrr} onChange={(event) => setMrr(event.target.value)} />
+                <Input
+                  id="legacy-tenant-mrr"
+                  type="number"
+                  min="0"
+                  step="1"
+                  required
+                  value={mrr}
+                  onChange={(event) => setMrr(event.target.value)}
+                />
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="legacy-lease-signed">Lease signed (if known)</Label>
-                <Input id="legacy-lease-signed" type="date" value={leaseSignedAt} onChange={(event) => setLeaseSignedAt(event.target.value)} />
+                <Input
+                  id="legacy-lease-signed"
+                  type="date"
+                  value={leaseSignedAt}
+                  onChange={(event) => setLeaseSignedAt(event.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="legacy-lease-start">Lease starts</Label>
-                <Input id="legacy-lease-start" type="date" required value={since} onChange={(event) => setSince(event.target.value)} />
+                <Input
+                  id="legacy-lease-start"
+                  type="date"
+                  required
+                  value={since}
+                  onChange={(event) => setSince(event.target.value)}
+                />
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setImportDialogOpen(false)}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setImportDialogOpen(false)}>
+                Cancel
+              </Button>
               <Button type="submit" disabled={saving || !legacyName.trim() || !branchId || !tier}>
-                {saving ? <LoaderCircle className="size-4 animate-spin" /> : <FileSignature className="size-4" />}
+                {saving ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <FileSignature className="size-4" />
+                )}
                 Import tenant
               </Button>
             </DialogFooter>
@@ -516,7 +684,11 @@ function Tenants() {
           <DialogHeader>
             <DialogTitle>Import tenant leases from CSV</DialogTitle>
             <DialogDescription>
-              Upload a spreadsheet saved as a .csv file to add multiple existing tenant lease records. This imports organizations and lease details, not people or member accounts. Required columns: organization_name, branch, tier, since, desks, mrr_zar. Optional: plan_name, lease_signed_at, website, industry. Dates use YYYY-MM-DD; tier uses day_pass, flex, dedicated, private_office, or enterprise.
+              Upload a spreadsheet saved as a .csv file to add multiple existing tenant lease
+              records. This imports organizations and lease details, not people or member accounts.
+              Required columns: organization_name, branch, tier, since, desks, mrr_zar. Optional:
+              plan_name, lease_signed_at, website, industry. Dates use YYYY-MM-DD; tier uses
+              day_pass, flex, dedicated, private_office, or enterprise.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -528,18 +700,39 @@ function Tenants() {
                 accept=".csv,text/csv"
                 onChange={(event) => void loadTenantCsv(event.target.files?.[0])}
               />
-              {csvFileName && <p className="text-xs text-muted-foreground">{csvFileName} · {csvRows.length} rows ready</p>}
+              {csvFileName && (
+                <p className="text-xs text-muted-foreground">
+                  {csvFileName} · {csvRows.length} rows ready
+                </p>
+              )}
             </div>
             {csvErrors.length > 0 && (
-              <div role="alert" className="max-h-40 overflow-auto rounded-md border border-warning/30 bg-warning/10 p-3 text-xs">
+              <div
+                role="alert"
+                className="max-h-40 overflow-auto rounded-md border border-warning/30 bg-warning/10 p-3 text-xs"
+              >
                 <p className="mb-2 font-medium">Rows needing attention</p>
-                {csvErrors.map((item) => <p key={item} className="mt-1">{item}</p>)}
+                {csvErrors.map((item) => (
+                  <p key={item} className="mt-1">
+                    {item}
+                  </p>
+                ))}
               </div>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCsvImportOpen(false)}>Close</Button>
-              <Button type="button" onClick={() => void importTenantCsv()} disabled={saving || csvRows.length === 0}>
-                {saving ? <LoaderCircle className="size-4 animate-spin" /> : <FileUp className="size-4" />}
+              <Button type="button" variant="outline" onClick={() => setCsvImportOpen(false)}>
+                Close
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void importTenantCsv()}
+                disabled={saving || csvRows.length === 0}
+              >
+                {saving ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <FileUp className="size-4" />
+                )}
                 Import {csvRows.length || ""} rows
               </Button>
             </DialogFooter>

@@ -15,7 +15,6 @@ import {
   LifeBuoy,
   Bell,
   BarChart3,
-  Sparkles,
   MessageSquare,
   Landmark,
   Mail,
@@ -44,7 +43,6 @@ const nav = [
     items: [
       { title: "Overview", url: "/", icon: LayoutDashboard },
       { title: "Analytics", url: "/analytics", icon: BarChart3 },
-      { title: "AI Assistant", url: "/ai-assistant", icon: Sparkles },
     ],
   },
   {
@@ -86,7 +84,7 @@ const nav = [
   {
     label: "Platform",
     items: [
-      { title: "Messaging", url: "/messaging", icon: MessageSquare },
+      { title: "Messages", url: "/messaging", icon: MessageSquare },
       { title: "Notifications", url: "/notifications", icon: Bell },
       { title: "Organization", url: "/organization", icon: Building2 },
       { title: "Account", url: "/account", icon: UserRound },
@@ -109,10 +107,7 @@ const salesManagerNav = [
   },
   {
     label: "Performance",
-    items: [
-      { title: "Analytics", url: "/analytics", icon: BarChart3 },
-      { title: "AI Assistant", url: "/ai-assistant", icon: Sparkles },
-    ],
+    items: [{ title: "Analytics", url: "/analytics", icon: BarChart3 }],
   },
   {
     label: "Business Development",
@@ -128,11 +123,37 @@ const salesManagerNav = [
   {
     label: "Team Tools",
     items: [
-      { title: "Messaging", url: "/messaging", icon: MessageSquare },
+      { title: "Messages", url: "/messaging", icon: MessageSquare },
       { title: "Notifications", url: "/notifications", icon: Bell },
     ],
   },
 ];
+
+const groupCeoNav = nav.map((group) => {
+  if (group.label === "Executive") return { ...group, label: "Executive Portfolio" };
+  if (group.label === "Revenue") {
+    return { ...group, items: group.items.filter((item) => item.url !== "/crm") };
+  }
+  if (group.label === "Operations") {
+    return {
+      ...group,
+      label: "Group Operations",
+      items: group.items.flatMap((item) => {
+        const titles: Record<string, string> = {
+          "/facilities": "Portfolio facilities",
+          "/bookings": "Cross-branch bookings",
+          "/union-station-admin": "Union Station performance",
+          "/support": "Group support health",
+        };
+        const navItem = { ...item, title: titles[item.url] ?? item.title };
+        return item.url === "/facilities"
+          ? [navItem, { title: "CRM performance", url: "/crm", icon: Target }]
+          : [navItem];
+      }),
+    };
+  }
+  return group;
+});
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -140,11 +161,13 @@ export function AppSidebar() {
   const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
   const revenueGroupLabel = role.id === "tenant-admin" ? "Invoice" : "Revenue";
   const sidebarGroups =
-    role.id === "sales-manager"
-      ? salesManagerNav
-      : nav.map((group) =>
-          group.label === "Revenue" ? { ...group, label: revenueGroupLabel } : group,
-        );
+    role.id === "group-ceo"
+      ? groupCeoNav
+      : role.id === "sales-manager"
+        ? salesManagerNav
+        : nav.map((group) =>
+            group.label === "Revenue" ? { ...group, label: revenueGroupLabel } : group,
+          );
 
   return (
     <Sidebar collapsible="icon">

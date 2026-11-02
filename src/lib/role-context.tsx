@@ -31,6 +31,14 @@ type Ctx = {
 const RoleContext = createContext<Ctx | null>(null);
 const COMMUNITY_KEY = "woos.ceo.showCommunity";
 const OVERRIDES_KEY = "woos.communityOverrides";
+const GLOBAL_BRANCH_ROLES = new Set<RoleId>([
+  "superadmin",
+  "group-admin",
+  "group-ceo",
+  "finance",
+  "crm-manager",
+  "sales-manager",
+]);
 
 const urlToKey = new Map<string, CommunityModuleKey>(COMMUNITY_MODULES.map((m) => [m.url, m.key]));
 const organizationRouteSections: Record<string, string[]> = {
@@ -53,6 +61,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const [assignedBranchName, setAssignedBranchName] = useState<string | null>(null);
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const [assignedBranchNames, setAssignedBranchNames] = useState<string[]>([]);
+  const [hasGlobalBranchAccess, setHasGlobalBranchAccess] = useState(false);
   const [organizationSections, setOrganizationSections] = useState<string[] | null>(null);
   const [showCommunity, setShowCommunity] = useState<boolean>(true);
   const [overrides, setOverrides] = useState<ModuleOverrides>({});
@@ -110,6 +119,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       const mappedRoles = (roleResult.data ?? [])
         .map(({ role }) => roleMap[role])
         .filter((id): id is RoleId => Boolean(id));
+      const hasGlobalScope = mappedRoles.some((id) => GLOBAL_BRANCH_ROLES.has(id));
       const rolePriority: RoleId[] = [
         "superadmin",
         "group-admin",
@@ -131,7 +141,18 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       let assignedBranch: string | null = null;
       let branchIdsForRole: string[] = [];
       let branchNamesForRole: string[] = [];
-      if (platformRoleRecord?.branch_id) {
+      if (hasGlobalScope) {
+        const { data: branches, error: branchError } = await supabase
+          .from("branches")
+          .select("id,name")
+          .order("name");
+        if (branchError) {
+          console.error("Global branch lookup failed:", branchError.message);
+        } else {
+          branchIdsForRole = (branches ?? []).map((branch) => branch.id);
+          branchNamesForRole = (branches ?? []).map((branch) => branch.name);
+        }
+      } else if (platformRoleRecord?.branch_id) {
         branchIdsForRole = (roleResult.data ?? [])
           .filter((assignment) => roleMap[assignment.role] === platformRole && assignment.branch_id)
           .map((assignment) => assignment.branch_id as string);
@@ -146,6 +167,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       setAssignedBranchName(assignedBranch);
       setAssignedBranchIds(branchIdsForRole);
       setAssignedBranchNames(branchNamesForRole);
+      setHasGlobalBranchAccess(hasGlobalScope);
       const organizationRole: RoleId | undefined =
         membership?.role === "admin"
           ? "organization-admin"
@@ -216,6 +238,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         setAssignedBranchName(null);
         setAssignedBranchIds([]);
         setAssignedBranchNames([]);
+        setHasGlobalBranchAccess(false);
         return;
       }
       window.setTimeout(() => void loadIdentity(session.user.id, session.user.email), 0);
@@ -245,6 +268,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+  const isGlobalBranchRole = GLOBAL_BRANCH_ROLES.has(roleDefinition.id) || hasGlobalBranchAccess;
   const role = {
     ...roleDefinition,
     user: userName ?? roleDefinition.user,
@@ -252,19 +276,27 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     ...(organizationName
       ? {
           tenant: organizationName,
+          scope: isGlobalBranchRole
+            ? roleDefinition.scope
+            : `${organizationName}${organizationBranch ? ` · ${organizationBranch}` : ""}`,
+        }
+      : {}),
+    ...(organizationBranch && !isGlobalBranchRole
+      ? {
+          branch: organizationBranch,
           scope: `${organizationName}${organizationBranch ? ` · ${organizationBranch}` : ""}`,
         }
       : {}),
-    ...(organizationBranch || assignedBranchName
+    ...(assignedBranchIds.length
       ? {
-          branch: organizationBranch ?? assignedBranchName ?? undefined,
+          ...(!isGlobalBranchRole && assignedBranchName ? { branch: assignedBranchName } : {}),
           branchIds: assignedBranchIds,
           branchNames: assignedBranchNames,
-          ...(roleDefinition.id === "branch-manager" && assignedBranchNames.length > 0
-            ? { title: `Branch Manager · ${assignedBranchNames.join(" + ")}` }
-            : {}),
           ...(roleDefinition.id === "branch-manager"
-            ? { scope: `${assignedBranchNames.join(", ") || assignedBranchName} · Branch management` }
+            ? {
+                title: `Branch Manager · ${assignedBranchNames.join(" + ")}`,
+                scope: `${assignedBranchNames.join(", ")} · Branch management`,
+              }
             : {}),
         }
       : {}),
@@ -272,10 +304,20 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       ? { scope: `${assignedBranchName} Café` }
       : {}),
   };
-  const canSeeRevenue = ["superadmin", "group-admin", "group-ceo", "crm-manager", "finance"].includes(role.id);
-  const canSeeInvoiceStatus = ["superadmin", "group-admin", "group-ceo", "finance", "tenant-admin"].includes(
-    role.id,
-  );
+  const canSeeRevenue = [
+    "superadmin",
+    "group-admin",
+    "group-ceo",
+    "crm-manager",
+    "finance",
+  ].includes(role.id);
+  const canSeeInvoiceStatus = [
+    "superadmin",
+    "group-admin",
+    "group-ceo",
+    "finance",
+    "tenant-admin",
+  ].includes(role.id);
 
   const getRoleAccess = useCallback(
     (rid: RoleId, key: CommunityModuleKey) => {
@@ -300,6 +342,16 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
   const canAccessUrl = useCallback(
     (url: string) => {
+      if (url === "/content") return true;
+      if (url === "/union-station" && role.id === "branch-manager") {
+        const assignedBranches = role.branchNames?.length
+          ? role.branchNames
+          : [role.branch ?? ""];
+        return (
+          role.nav.includes(url) &&
+          assignedBranches.some((branch) => branch.trim().toLowerCase() === "kyalami")
+        );
+      }
       if (!role.nav.includes(url)) return false;
       if (role.id === "organization-admin" || role.id === "organization-member") {
         if (sharedOrganizationRoutes.has(url)) return true;

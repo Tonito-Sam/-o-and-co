@@ -21,7 +21,7 @@ import { SalesAnalyticsDashboard } from "@/components/SalesAnalyticsDashboard";
 import { branches, revenueTrend, formatZAR, leads, invoices, tenants, type Invoice } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
 import { getSageApiClient, isSageConfigured, mapSageInvoiceToAppInvoice } from "@/lib/sage-api";
-import { FinancialOverviewDashboard } from "@/components/FinancialOverviewDashboard";
+import { FinancialAnalyticsDashboard } from "@/components/finance/FinancialAnalyticsDashboard";
 
 export const Route = createFileRoute("/analytics")({
   head: () => ({ meta: [{ title: "Analytics — WorkspaceOS" }] }),
@@ -34,7 +34,7 @@ const pieColors = ["#0f766e", "#1d4ed8", "#ea580c", "#8b5cf6"];
 function Analytics() {
   const { role } = useRole();
   if (["superadmin", "group-admin", "group-ceo", "finance", "branch-manager"].includes(role.id)) {
-    return <FinancialOverviewDashboard role={role} />;
+    return <FinancialAnalyticsDashboard role={role} />;
   }
   if (["crm-manager", "sales-manager"].includes(role.id)) {
     return <SalesAnalyticsDashboard />;

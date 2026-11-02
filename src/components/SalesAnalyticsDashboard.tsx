@@ -263,7 +263,7 @@ export function SalesAnalyticsDashboard() {
       <PageHeader
         eyebrow="Sales & CRM analytics"
         title="Pipeline and conversion"
-        description="Live reporting from CRM leads, stage changes, and their assigned branches. No projections or sample records are included."
+        description="Live reporting from CRM leads, stage changes, and their assigned branches."
         actions={
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">History</span>

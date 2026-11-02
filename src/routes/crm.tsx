@@ -19,11 +19,17 @@ import { leads, stages, formatZAR, type Lead } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
 import { toast } from "sonner";
+import { SalesAnalyticsDashboard } from "@/components/SalesAnalyticsDashboard";
 
 export const Route = createFileRoute("/crm")({
   head: () => ({ meta: [{ title: "CRM & Sales — WorkspaceOS" }] }),
-  component: CRM,
+  component: CrmRoute,
 });
+
+function CrmRoute() {
+  const { role } = useRole();
+  return role.id === "group-ceo" ? <SalesAnalyticsDashboard /> : <CRM />;
+}
 
 type LeadRecord = (typeof leads)[number] & {
   organizationId?: string | null;
