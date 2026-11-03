@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, Landmark, RefreshCw, Users } from "lucide-react";
+import { ArrowUpRight, FileText, Landmark, RefreshCw, Users } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { getSupabaseClient } from "@/lib/supabase";
 import { useRole } from "@/lib/role-context";
+import { toast } from "sonner";
 
 type VenueRequest = {
   id: string;
@@ -35,6 +47,11 @@ export function UnionStationPerformanceDashboard() {
   const [requests, setRequests] = useState<VenueRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [quoteRequest, setQuoteRequest] = useState<VenueRequest | null>(null);
+  const [quoteAmount, setQuoteAmount] = useState("");
+  const [quoteNotes, setQuoteNotes] = useState("");
+  const [savingQuote, setSavingQuote] = useState(false);
+  const canQuote = ["branch-manager", "crm-manager", "sales-manager", "group-admin", "group-ceo", "superadmin"].includes(role.id);
 
   const loadRequests = useCallback(async () => {
     const supabase = getSupabaseClient();
@@ -64,6 +81,36 @@ export function UnionStationPerformanceDashboard() {
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
+
+  const saveQuote = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!quoteRequest) return;
+    const amount = Number(quoteAmount);
+    if (!Number.isInteger(amount) || amount < 1 || amount > 10_000_000) {
+      toast.error("Enter a whole-number quote between R1 and R10,000,000.");
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setSavingQuote(true);
+    const { error: quoteError } = await supabase.rpc("submit_union_station_quote", {
+      p_request_id: quoteRequest.id,
+      p_quote_amount_zar: amount,
+      p_quote_notes: quoteNotes.trim() || null,
+    });
+    setSavingQuote(false);
+    if (quoteError) {
+      toast.error(`Could not save Union Station quote: ${quoteError.message}`);
+      return;
+    }
+    setRequests((current) => current.map((request) => request.id === quoteRequest.id
+      ? { ...request, estimate_zar: amount, status: "quoted" }
+      : request));
+    setQuoteRequest(null);
+    setQuoteAmount("");
+    setQuoteNotes("");
+    toast.success("Union Station quote saved.");
+  };
 
   const activeRequests = requests.filter(
     (request) => !["completed", "declined"].includes(request.status),
@@ -99,13 +146,13 @@ export function UnionStationPerformanceDashboard() {
             ? "Group Operations · Union Station"
             : "Union Station · Venue operations"
         }
-        title={role.id === "group-ceo" ? "Union Station performance" : "Venue performance"}
-        description="Venue request volume, event estimates, attendance, and contract status from live booking records."
+        title={role.id === "group-ceo" ? "Union Station performance" : "Union Station admin"}
+        description="Internal venue operations: review event enquiries, prepare quotes, and track contract status. This is separate from the visitor booking page."
         actions={
           <>
             <Button asChild variant="outline" size="sm">
               <Link to="/union-station">
-                Booking workflow <ArrowUpRight className="ml-1 size-4" />
+                Visitor booking page <ArrowUpRight className="ml-1 size-4" />
               </Link>
             </Button>
             <Button
@@ -175,7 +222,7 @@ export function UnionStationPerformanceDashboard() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] text-left text-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="border-b bg-muted/30 text-[11px] uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-medium">Reference</th>
@@ -186,6 +233,7 @@ export function UnionStationPerformanceDashboard() {
                   <th className="px-4 py-3 text-right font-medium">Estimate</th>
                   <th className="px-4 py-3 text-right font-medium">Contract</th>
                   <th className="px-4 py-3 text-right font-medium">Status</th>
+                  {canQuote ? <th className="px-4 py-3 text-right font-medium">Actions</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -229,6 +277,21 @@ export function UnionStationPerformanceDashboard() {
                         {request.status.replaceAll("_", " ")}
                       </Badge>
                     </td>
+                    {canQuote ? (
+                      <td className="px-4 py-3 text-right">
+                        {["submitted", "in_review"].includes(request.status) ? (
+                          <Button size="sm" variant="outline" onClick={() => {
+                            setQuoteRequest(request);
+                            setQuoteAmount(request.estimate_zar > 0 ? String(request.estimate_zar) : "");
+                            setQuoteNotes("");
+                          }}>
+                            <FileText className="mr-1.5 size-4" />Prepare quote
+                          </Button>
+                        ) : request.status === "quoted" ? (
+                          <span className="text-xs text-muted-foreground">Quote saved</span>
+                        ) : null}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -256,6 +319,30 @@ export function UnionStationPerformanceDashboard() {
           ))}
         </div>
       </section>
+      <Dialog open={quoteRequest !== null} onOpenChange={(open) => !open && setQuoteRequest(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Prepare Union Station quote</DialogTitle>
+            <DialogDescription>
+              {quoteRequest?.reference} · {quoteRequest?.client_company} · {quoteRequest?.event_type}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(event) => void saveQuote(event)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="union-quote-amount">Quote amount (ZAR)</Label>
+              <Input id="union-quote-amount" type="number" min="1" max="10000000" step="1" required value={quoteAmount} onChange={(event) => setQuoteAmount(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="union-quote-notes">Quote notes</Label>
+              <Textarea id="union-quote-notes" maxLength={2000} value={quoteNotes} onChange={(event) => setQuoteNotes(event.target.value)} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setQuoteRequest(null)}>Cancel</Button>
+              <Button type="submit" disabled={savingQuote}>{savingQuote ? "Saving…" : "Save quote"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

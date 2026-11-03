@@ -11,7 +11,9 @@ For a project that currently has Supabase Auth but no WorkspaceOS public tables:
 
 ## Public booking requests
 
-The public workspace form creates a request, not a confirmed reservation or invoice. Branch managers, branch-scoped sales staff, and CRM staff review availability and submit a priced quote. Finance reviews the quote in Billing and issues the invoice; the branch confirms the booking only after that invoice is issued. Customer and internal email delivery is queued in `public.booking_email_outbox`, while internal users also receive in-app notifications.
+The public workspace form creates a request, not a confirmed reservation or invoice. Branch managers, branch-scoped sales staff, and CRM staff review availability and submit a priced quote. Finance or the assigned branch manager can issue the invoice; the branch confirms the booking only after that invoice is issued. Customer and internal email delivery is queued in `public.booking_email_outbox`, while internal users also receive in-app notifications.
+
+Union Station has a separate visitor enquiry page (`/union-station`) and internal admin page (`/union-station-admin`). Authorized venue staff prepare quotes in the admin page; quote amounts and notes are recorded in the request and approval history.
 
 To enable email delivery, configure the Supabase project secrets `RESEND_API_KEY` and `EMAIL_FROM`, then deploy the function:
 

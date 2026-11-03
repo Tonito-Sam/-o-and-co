@@ -316,6 +316,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     "group-admin",
     "group-ceo",
     "finance",
+    "branch-manager",
     "tenant-admin",
   ].includes(role.id);
 
@@ -343,7 +344,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const canAccessUrl = useCallback(
     (url: string) => {
       if (url === "/content") return true;
-      if (url === "/union-station" && role.id === "branch-manager") {
+      if (["/union-station", "/union-station-admin"].includes(url) && role.id === "branch-manager") {
         const assignedBranches = role.branchNames?.length
           ? role.branchNames
           : [role.branch ?? ""];

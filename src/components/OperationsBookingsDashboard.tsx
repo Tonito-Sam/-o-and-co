@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, RefreshCw } from "lucide-react";
+import { CalendarDays, FileText, ReceiptText, RefreshCw } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { type RoleDef } from "@/lib/mock";
 import { getSupabaseClient } from "@/lib/supabase";
+import { toast } from "sonner";
 
 type RelatedBranch = { name: string } | { name: string }[] | null;
 type RoomRelation = { name: string } | { name: string }[] | null;
@@ -69,6 +81,10 @@ export function OperationsBookingsDashboard({ role }: { role: RoleDef }) {
   const [bookings, setBookings] = useState<OperationBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [quoteBooking, setQuoteBooking] = useState<OperationBooking | null>(null);
+  const [quoteAmount, setQuoteAmount] = useState("");
+  const [quoteNotes, setQuoteNotes] = useState("");
+  const [savingAction, setSavingAction] = useState(false);
   const branchScope = role.id === "branch-manager" ? (role.branchIds ?? []).join(",") : "all";
 
   const loadBookings = useCallback(async () => {
@@ -157,6 +173,55 @@ export function OperationsBookingsDashboard({ role }: { role: RoleDef }) {
   useEffect(() => {
     void loadBookings();
   }, [loadBookings]);
+
+  const saveQuote = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!quoteBooking) return;
+    const amount = Number(quoteAmount);
+    if (!Number.isInteger(amount) || amount < 1 || amount > 10_000_000) {
+      toast.error("Enter a whole-number quote between R1 and R10,000,000.");
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setSavingAction(true);
+    const { error: quoteError } = await supabase.rpc("submit_one_off_booking_quote", {
+      p_booking_id: quoteBooking.id,
+      p_quote_amount_zar: amount,
+      p_quote_notes: quoteNotes.trim() || null,
+    });
+    setSavingAction(false);
+    if (quoteError) {
+      toast.error(`Could not save quote: ${quoteError.message}`);
+      return;
+    }
+    setBookings((current) => current.map((booking) => booking.id === quoteBooking.id
+      ? { ...booking, request_status: "quoted", status: "quoted", quote_amount_zar: amount }
+      : booking));
+    setQuoteBooking(null);
+    setQuoteAmount("");
+    setQuoteNotes("");
+    toast.success("Quote saved and sent to Finance for invoicing.");
+  };
+
+  const issueInvoice = async (booking: OperationBooking) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setSavingAction(true);
+    const { data, error: invoiceError } = await supabase.rpc("issue_one_off_booking_invoice", {
+      p_booking_id: booking.id,
+    });
+    setSavingAction(false);
+    if (invoiceError) {
+      toast.error(`Could not issue invoice: ${invoiceError.message}`);
+      return;
+    }
+    const result = data as { invoice_reference?: string };
+    setBookings((current) => current.map((item) => item.id === booking.id
+      ? { ...item, request_status: "invoice_sent", status: "invoice_sent", invoice_reference: result.invoice_reference ?? item.invoice_reference }
+      : item));
+    toast.success(`Invoice ${result.invoice_reference ?? "issued"} and sent to the client.`);
+  };
 
   const upcoming = useMemo(() => {
     const now = Date.now();
@@ -250,7 +315,7 @@ export function OperationsBookingsDashboard({ role }: { role: RoleDef }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-left text-sm">
+            <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="border-b bg-muted/30 text-[11px] uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-medium">Reference</th>
@@ -263,6 +328,7 @@ export function OperationsBookingsDashboard({ role }: { role: RoleDef }) {
                   <th className="px-4 py-3 text-right font-medium">Guests</th>
                   <th className="px-4 py-3 text-right font-medium">Quote</th>
                   <th className="px-4 py-3 text-right font-medium">Status</th>
+                  {role.id === "branch-manager" ? <th className="px-4 py-3 text-right font-medium">Actions</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -302,6 +368,25 @@ export function OperationsBookingsDashboard({ role }: { role: RoleDef }) {
                         {booking.status.replaceAll("_", " ")}
                       </Badge>
                     </td>
+                    {role.id === "branch-manager" ? (
+                      <td className="px-4 py-3 text-right">
+                        {booking.request_status === "pending_review" ? (
+                          <Button size="sm" variant="outline" onClick={() => {
+                            setQuoteBooking(booking);
+                            setQuoteAmount("");
+                            setQuoteNotes("");
+                          }}>
+                            <FileText className="mr-1.5 size-4" />Quote
+                          </Button>
+                        ) : booking.request_status === "quoted" ? (
+                          <Button size="sm" onClick={() => void issueInvoice(booking)} disabled={savingAction}>
+                            <ReceiptText className="mr-1.5 size-4" />Issue invoice
+                          </Button>
+                        ) : booking.request_status === "invoice_sent" ? (
+                          <span className="text-xs text-muted-foreground">Invoice sent</span>
+                        ) : null}
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -309,6 +394,30 @@ export function OperationsBookingsDashboard({ role }: { role: RoleDef }) {
           </div>
         )}
       </section>
+      <Dialog open={quoteBooking !== null} onOpenChange={(open) => !open && setQuoteBooking(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Prepare booking quote</DialogTitle>
+            <DialogDescription>
+              {quoteBooking?.request_reference} · {quoteBooking?.space_name} · {quoteBooking ? new Date(quoteBooking.starts_at).toLocaleDateString() : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(event) => void saveQuote(event)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="booking-quote-amount">Quote amount (ZAR)</Label>
+              <Input id="booking-quote-amount" type="number" min="1" max="10000000" step="1" required value={quoteAmount} onChange={(event) => setQuoteAmount(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="booking-quote-notes">Quote notes</Label>
+              <Textarea id="booking-quote-notes" maxLength={2000} value={quoteNotes} onChange={(event) => setQuoteNotes(event.target.value)} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setQuoteBooking(null)}>Cancel</Button>
+              <Button type="submit" disabled={savingAction}>{savingAction ? "Saving…" : "Save quote"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

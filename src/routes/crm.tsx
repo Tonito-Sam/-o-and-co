@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { LoaderCircle, Mail, RotateCcw, Save } from "lucide-react";
+import { LoaderCircle, Mail, MessageSquare, RotateCcw, Save } from "lucide-react";
 import { leads, stages, formatZAR, type Lead } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -448,7 +448,7 @@ type CrmOrganization = { id: string; name: string };
 type CrmBranch = { id: string; name: string };
 
 function CRM() {
-  const { canSeeRevenue, role } = useRole();
+  const { canSeeRevenue, canAccessUrl, role } = useRole();
   const canManageTemplates = ["crm-manager", "sales-manager", "group-admin", "group-ceo", "superadmin"].includes(role.id);
   const [activeView, setActiveView] = useState<"pipeline" | "templates">("pipeline");
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
@@ -694,6 +694,11 @@ function CRM() {
             ? "Manage shared email copy for prospect discovery and sales follow-up."
             : "Registered enquiries and tour requests through qualification, contract, and tenant activation."
         }
+        actions={canAccessUrl("/messaging") ? (
+          <Button asChild size="sm" variant="outline">
+            <Link to="/messaging"><MessageSquare className="mr-2 size-4" />Messages</Link>
+          </Button>
+        ) : null}
       />
       {canManageTemplates && (
         <div className="mb-5 flex gap-1 border-b" role="tablist" aria-label="CRM views">

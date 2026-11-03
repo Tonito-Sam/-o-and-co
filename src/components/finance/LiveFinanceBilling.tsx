@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
-import { loadLiveFinanceSnapshot, type LiveFinanceSnapshot } from "@/lib/finance-data";
+import { loadLiveFinanceSnapshot, type LiveFinanceSnapshot, type LiveInvoiceRow } from "@/lib/finance-data";
 
 const formatZAR = (amount: number) =>
   new Intl.NumberFormat("en-ZA", {
@@ -17,6 +18,7 @@ const formatZAR = (amount: number) =>
 export function LiveFinanceBilling() {
   const { role, canSeeRevenue, canSeeInvoiceStatus } = useRole();
   const [snapshot, setSnapshot] = useState<LiveFinanceSnapshot | null>(null);
+  const [branchInvoices, setBranchInvoices] = useState<LiveInvoiceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [bookingWorkflowUnavailable, setBookingWorkflowUnavailable] = useState(false);
@@ -24,6 +26,20 @@ export function LiveFinanceBilling() {
   const loadBillingData = useCallback(async (currentRoleId: string) => {
     setLoading(true);
     try {
+      if (currentRoleId === "branch-manager") {
+        const supabase = getSupabaseClient();
+        if (!supabase) throw new Error("Workspace data is not configured.");
+        const { data, error: invoiceError } = await supabase
+          .from("invoices")
+          .select("id,reference,tenant_id,amount_zar,status,issued_at,due_at,paid_at,metadata")
+          .order("issued_at", { ascending: false })
+          .limit(500);
+        if (invoiceError) throw new Error(invoiceError.message);
+        setBranchInvoices((data ?? []) as LiveInvoiceRow[]);
+        setSnapshot(null);
+        setError("");
+        return;
+      }
       const liveSnapshot = await loadLiveFinanceSnapshot();
       setSnapshot(liveSnapshot);
       setError("");
@@ -49,20 +65,28 @@ export function LiveFinanceBilling() {
   }, [loadBillingData, role.id]);
 
   const totals = snapshot?.totals;
-  const invoices = snapshot?.invoices ?? [];
+  const invoices = role.id === "branch-manager" ? branchInvoices : snapshot?.invoices ?? [];
 
   return (
     <div className="mx-auto max-w-350 space-y-6">
       <PageHeader
-        eyebrow="Billing, Finance & Payments"
-        title={canSeeRevenue ? "Revenue & Invoices" : "Invoices & Status"}
+        eyebrow={role.id === "branch-manager" ? `${role.branch ?? "Branch"} · Billing` : "Billing, Finance & Payments"}
+        title={canSeeRevenue ? "Revenue & Invoices" : role.id === "branch-manager" ? "Branch invoices" : "Invoices & Status"}
         description={
           canSeeRevenue
             ? "Live financial performance and invoice records from the connected workspace database."
-            : `Invoice status for ${role.tenant ?? "your account"}.`
+            : role.id === "branch-manager"
+              ? "Invoices for your assigned branch. Prepare quotes and issue booking invoices from branch bookings."
+              : `Invoice status for ${role.tenant ?? "your account"}.`
         }
         actions={
-          canSeeRevenue ? (
+          canSeeRevenue || role.id === "branch-manager" ? (
+            <div className="flex items-center gap-2">
+              {role.id === "branch-manager" ? (
+                <Button asChild size="sm">
+                  <Link to="/bookings">Manage booking invoices</Link>
+                </Button>
+              ) : null}
             <Button
               variant="outline"
               size="sm"
@@ -72,6 +96,7 @@ export function LiveFinanceBilling() {
               <RefreshCw className={`mr-2 size-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
+            </div>
           ) : null
         }
       />
@@ -238,7 +263,11 @@ export function LiveFinanceBilling() {
                 <tbody className="divide-y">
                   {invoices.map((invoice) => {
                     const metadataAccount =
-                      invoice.metadata?.company_name ?? invoice.metadata?.tenant_name;
+                      invoice.metadata?.company_name ??
+                      invoice.metadata?.tenant_name ??
+                      (invoice.metadata?.kind === "one_off_booking" && typeof invoice.metadata?.request_reference === "string"
+                        ? `Booking ${invoice.metadata.request_reference}`
+                        : undefined);
                     const account =
                       typeof metadataAccount === "string"
                         ? metadataAccount
