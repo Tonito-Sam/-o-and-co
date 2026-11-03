@@ -697,7 +697,7 @@ function EventCheckInManager({
   };
 
   const origin =
-    typeof window === "undefined" ? "https://oandco.ggempire.co.za" : window.location.origin;
+    typeof window === "undefined" ? "https://app.officeandco.co.za" : window.location.origin;
   const checkInUrl = (code: string) => `${origin}/checkin/${code}`;
   const downloadQr = async (code: string) => {
     const image = await QRCode.toDataURL(checkInUrl(code), {
