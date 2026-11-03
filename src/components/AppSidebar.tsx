@@ -155,6 +155,19 @@ const groupCeoNav = nav.map((group) => {
   return group;
 });
 
+const branchManagerNav = nav.map((group) =>
+  group.label === "Operations"
+    ? {
+        ...group,
+        items: group.items
+          .filter((item) => item.url !== "/union-station")
+          .map((item) =>
+            item.url === "/union-station-admin" ? { ...item, title: "Union Station" } : item,
+          ),
+      }
+    : group,
+);
+
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { role, canAccessUrl } = useRole();
@@ -165,9 +178,11 @@ export function AppSidebar() {
       ? groupCeoNav
       : role.id === "sales-manager"
         ? salesManagerNav
-        : nav.map((group) =>
-            group.label === "Revenue" ? { ...group, label: revenueGroupLabel } : group,
-          );
+        : role.id === "branch-manager"
+          ? branchManagerNav
+          : nav.map((group) =>
+              group.label === "Revenue" ? { ...group, label: revenueGroupLabel } : group,
+            );
 
   return (
     <Sidebar collapsible="icon">

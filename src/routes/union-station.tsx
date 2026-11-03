@@ -29,9 +29,12 @@ function PublicUnionStation() {
   const { role, isLoading } = useRole();
   const navigate = useNavigate();
   const assignedBranches = role.branchNames?.length ? role.branchNames : [role.branch ?? ""];
+  const isKyalamiBranchManager =
+    role.id === "branch-manager" &&
+    assignedBranches.some((branch) => branch.trim().toLowerCase() === "kyalami");
   const isUnauthorizedBranchManager =
     role.id === "branch-manager" &&
-    !assignedBranches.some((branch) => branch.trim().toLowerCase() === "kyalami");
+    !isKyalamiBranchManager;
   const [bookings, setBookings] = useState<CalendarEvent[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(true);
   const [availabilityError, setAvailabilityError] = useState("");
@@ -55,12 +58,12 @@ function PublicUnionStation() {
 
   useEffect(() => {
     if (isLoading) return;
-    if (role.id === "group-ceo") {
+    if (role.id === "group-ceo" || isKyalamiBranchManager) {
       void navigate({ to: "/union-station-admin", replace: true });
     } else if (isUnauthorizedBranchManager) {
       void navigate({ to: "/facilities", replace: true });
     }
-  }, [isLoading, isUnauthorizedBranchManager, role.id, navigate]);
+  }, [isLoading, isKyalamiBranchManager, isUnauthorizedBranchManager, role.id, navigate]);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -179,7 +182,7 @@ function PublicUnionStation() {
 
   if (role.id === "group-ceo") return null;
 
-  if (isLoading || isUnauthorizedBranchManager || role.id === "group-ceo") return null;
+  if (isLoading || isKyalamiBranchManager || isUnauthorizedBranchManager || role.id === "group-ceo") return null;
 
   return (
     <div className="mx-auto max-w-350">
