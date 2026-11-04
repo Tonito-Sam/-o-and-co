@@ -138,6 +138,9 @@ type StaffProfile = { id: string; full_name: string | null; email: string | null
 type StaffBranch = { id: string; name: string };
 type StaffAssignment = { id: string; user_id: string; role: string; branch_id: string | null };
 
+const isOfficeCoEmail = (email: string | null) =>
+  email?.trim().toLowerCase().endsWith("@officeandco.co.za") ?? false;
+
 const assignableRoles = [
   { value: "branch_manager", label: "Branch manager", scope: "branch" },
   { value: "cafe_manager", label: "Café manager", scope: "branch" },
@@ -199,12 +202,12 @@ function StaffRoleAssignments({ isPlatformAdmin }: { isPlatformAdmin: boolean })
   const visibleBranches = isPlatformAdmin
     ? branches
     : branches.filter((branch) => branchManagerBranchIds.includes(branch.id));
-  const availableProfiles = isPlatformAdmin
-    ? profiles
-    : profiles.filter((profile) =>
-        (profile.work_branch_id && visibleBranches.some((branch) => branch.id === profile.work_branch_id))
-        || assignments.some((assignment) => assignment.user_id === profile.id && assignment.branch_id && visibleBranches.some((branch) => branch.id === assignment.branch_id)),
-      );
+  const availableProfiles = profiles.filter((profile) =>
+    isOfficeCoEmail(profile.email)
+    && (isPlatformAdmin
+      || (profile.work_branch_id && visibleBranches.some((branch) => branch.id === profile.work_branch_id))
+      || assignments.some((assignment) => assignment.user_id === profile.id && assignment.branch_id && visibleBranches.some((branch) => branch.id === assignment.branch_id))),
+  );
 
   const saveAssignment = async (userId: string, assignmentRole: string, branchId: string | null, assign: boolean) => {
     const supabase = getSupabaseClient();
@@ -233,9 +236,9 @@ function StaffRoleAssignments({ isPlatformAdmin }: { isPlatformAdmin: boolean })
   return (
     <section className="mb-6 overflow-hidden rounded-lg border bg-card">
       <div className="border-b p-4">
-        <h2 className="font-display text-base font-semibold">Staff assignments</h2>
+        <h2 className="font-display text-base font-semibold">Office &amp; Co staff assignments</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Group roles cover all branches; branch roles apply only at the selected location.
+          Assign roles to @officeandco.co.za accounts. Group roles cover all branches; branch roles apply only at the selected location.
         </p>
       </div>
       <div className="grid gap-3 p-4 sm:grid-cols-[minmax(12rem,1.3fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_auto] sm:items-end">

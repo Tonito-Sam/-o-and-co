@@ -545,6 +545,7 @@ function PantryBoard({
       const { data: availableBranches, error: branchError } = await supabase
         .from("branches")
         .select("id,name")
+        .eq("status", "live")
         .order("name");
       if (!active) return;
       if (branchError) {
@@ -1055,7 +1056,7 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
           .from("cafe_orders")
           .select("id,branch_id,item,amount_zar,method,status,organization_name,purchaser_name,created_at")
           .order("created_at", { ascending: false }),
-        supabase.from("branches").select("id,name").order("name"),
+        supabase.from("branches").select("id,name").eq("status", "live").order("name"),
       ]);
       if (!active) return;
       if (orderResult.error || branchResult.error) {
