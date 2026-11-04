@@ -42,6 +42,7 @@ function emailContent(row: OutboxRow) {
   const date = String(data.booking_date ?? "To be confirmed");
   const time = `${String(data.starts_at ?? "")}–${String(data.ends_at ?? "")}`;
   const guests = String(data.guests ?? "");
+  const isUnionStationRequest = Boolean(data.event_type);
   const detailRows = [
     ["Request", reference],
     ["Branch", branch],
@@ -54,11 +55,35 @@ function emailContent(row: OutboxRow) {
   let intro = "";
 
   if (row.event === "request_received") {
-    subject = internal ? `New booking request · ${branch}` : `We received your space request · ${reference}`;
-    heading = internal ? "New space request" : `Thanks${data.contact_name ? `, ${String(data.contact_name)}` : ""}. We received your request.`;
+    subject = internal
+      ? `New booking request · ${branch}`
+      : isUnionStationRequest
+        ? `We received your Union Station event enquiry · ${reference}`
+        : `We received your space request · ${reference}`;
+    heading = internal
+      ? "New space request"
+      : `Thanks${data.contact_name ? `, ${String(data.contact_name)}` : ""}. We received your request.`;
     intro = internal
       ? `${String(data.company_name ?? "A visitor")} has requested a space. Review it in WorkspaceOS under Bookings.`
-      : "This is a request, not a confirmed booking. The branch team will check availability and follow up with you.";
+      : isUnionStationRequest
+        ? "Our events team will review your requirements and follow up to confirm pricing and availability. This is not a confirmed booking."
+        : "This is a request, not a confirmed booking. The branch team will check availability and follow up with you.";
+    if (isUnionStationRequest) {
+      const avAddons = Array.isArray(data.av_addons) ? data.av_addons.map(String).join(", ") : String(data.av_addons ?? "");
+      detailRows.push(
+        ["Company", String(data.company_name ?? "")],
+        ["Contact email", String(data.contact_email ?? row.recipient_email)],
+        ["WhatsApp number", String(data.contact_phone ?? "")],
+        ["Alternative phone", String(data.alternate_phone ?? "Not provided")],
+        ["Event type", String(data.event_type)],
+        ["Room layout", String(data.layout ?? "To be discussed")],
+        ["Catering", String(data.catering ?? "")],
+        ["Menu requirements", String(data.menu_requirements ?? "None specified")],
+        ["Equipment hire", String(data.equipment_requirements ?? "None specified")],
+        ["AV and production", avAddons || "None specified"],
+        ["Additional notes", String(data.notes ?? "None provided")],
+      );
+    }
   } else if (row.event === "finance_quote_ready") {
     subject = `Booking quote ready for Finance · ${reference}`;
     heading = "A branch quote is ready for Finance";
@@ -81,7 +106,10 @@ function emailContent(row: OutboxRow) {
   }
 
   const rows = detailRows.map(([label, value]) => `<tr><td style="padding:6px 12px 6px 0;color:#667085">${escapeHtml(label)}</td><td style="padding:6px 0;font-weight:600">${escapeHtml(value)}</td></tr>`).join("");
-  const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#202733;line-height:1.55"><h2 style="font-size:22px">${escapeHtml(heading)}</h2><p>${escapeHtml(intro)}</p><table style="border-collapse:collapse;margin:20px 0">${rows}</table>${!internal && row.event === "request_received" ? "<p>We will contact you by email or phone after checking the space and requested time. Please do not treat this as a reservation.</p>" : ""}<p style="color:#667085;font-size:13px">Office &amp; Co · Workspace bookings</p></div>`;
+  const followUp = isUnionStationRequest
+    ? "The events team will review your request and contact you to confirm pricing and availability. This is not a confirmed booking."
+    : "We will contact you by email or phone after checking the space and requested time. Please do not treat this as a reservation.";
+  const html = `<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#202733;line-height:1.55"><h2 style="font-size:22px">${escapeHtml(heading)}</h2><p>${escapeHtml(intro)}</p><table style="border-collapse:collapse;margin:20px 0">${rows}</table>${!internal && row.event === "request_received" ? `<p>${escapeHtml(followUp)}</p>` : ""}<p style="color:#667085;font-size:13px">Office &amp; Co · Workspace bookings</p></div>`;
   const text = [heading, intro, ...detailRows.map(([label, value]) => `${label}: ${value}`), "Office & Co"].join("\n\n");
   return { subject, html, text };
 }

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
@@ -43,9 +43,16 @@ export const Route = createFileRoute("/events")({
 });
 
 function Events() {
-  const { role } = useRole();
+  const { role, isLoading } = useRole();
+  const navigate = useNavigate();
+  const isTenant = ["tenant-admin", "organization-admin", "organization-member"].includes(role.id);
   const assignedBranchIds = role.branchIds ?? [];
   const assignedBranchNames = role.branchNames ?? (role.branch ? [role.branch] : []);
+  useEffect(() => {
+    if (!isLoading && isTenant) void navigate({ to: "/", replace: true });
+  }, [isLoading, isTenant, navigate]);
+
+  if (isLoading || isTenant) return null;
   if (role.id === "group-ceo") return <GroupEventsPortfolio />;
 
   const canManageCheckIn = [

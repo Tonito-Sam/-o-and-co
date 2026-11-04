@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,14 @@ export const Route = createFileRoute("/tour-calendar")({
     ...(typeof search.leadId === "string" ? { leadId: search.leadId } : {}),
     ...(typeof search.branch === "string" ? { branch: search.branch } : {}),
   }),
+  beforeLoad: ({ search }) => {
+    if (!search.leadId) {
+      throw redirect({
+        to: "/tour-request",
+        search: search.branch ? { branch: search.branch } : {},
+      });
+    }
+  },
   component: TourCalendar,
 });
 

@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getSupabaseClient } from "@/lib/supabase";
 import { formatZAR } from "@/lib/mock";
+import { UnionStationBookingDialog } from "@/components/UnionStationBookingDialog";
 
 type Branch = { id: string; name: string; city: string | null; status: string };
 type OrganizationContext = { userId: string; organizationId: string; branchId: string };
@@ -45,6 +46,14 @@ type InvoiceRow = {
   paid_at: string | null;
   metadata: Record<string, unknown> | null;
 };
+type UnionStationRequestRow = {
+  id: string;
+  reference: string;
+  event_type: string;
+  event_date: string;
+  status: string;
+  estimate_zar: number;
+};
 type TicketRow = {
   id: string;
   reference: string | null;
@@ -52,6 +61,13 @@ type TicketRow = {
   body: string | null;
   priority: string;
   status: string;
+  created_at: string;
+};
+type TicketMessageRow = {
+  id: string;
+  ticket_id: string;
+  author_id: string;
+  message: string;
   created_at: string;
 };
 
@@ -733,6 +749,8 @@ export function OrganizationBookingsView() {
 
 export function OrganizationSupportView() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
+  const [ticketMessages, setTicketMessages] = useState<Record<string, TicketMessageRow[]>>({});
+  const [viewerId, setViewerId] = useState("");
   const [branchId, setBranchId] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -744,6 +762,7 @@ export function OrganizationSupportView() {
     if (!supabase) throw new Error("Workspace data is not configured.");
     const { data: user } = await supabase.auth.getUser();
     if (!user.user) throw new Error("Sign in to view support requests.");
+    setViewerId(user.user.id);
     const [membership, userRole] = await Promise.all([
       supabase
         .from("organization_members")
@@ -768,7 +787,24 @@ export function OrganizationSupportView() {
       .order("created_at", { ascending: false })
       .limit(50);
     if (ticketError) throw ticketError;
-    setTickets((data ?? []) as TicketRow[]);
+    const ticketRows = (data ?? []) as TicketRow[];
+    setTickets(ticketRows);
+    if (!ticketRows.length) {
+      setTicketMessages({});
+      return;
+    }
+    const { data: messages, error: messageError } = await supabase
+      .from("support_ticket_messages")
+      .select("id,ticket_id,author_id,message,created_at")
+      .in("ticket_id", ticketRows.map((ticket) => ticket.id))
+      .order("created_at", { ascending: true });
+    if (messageError) throw messageError;
+    setTicketMessages((messages ?? []).reduce<Record<string, TicketMessageRow[]>>((grouped, message) => {
+      const ticketMessagesForTicket = grouped[message.ticket_id] ?? [];
+      ticketMessagesForTicket.push(message as TicketMessageRow);
+      grouped[message.ticket_id] = ticketMessagesForTicket;
+      return grouped;
+    }, {}));
   };
   useEffect(() => {
     void loadTickets()
@@ -868,6 +904,20 @@ export function OrganizationSupportView() {
                         new Date(ticket.created_at),
                       )}
                     </p>
+                    {(ticketMessages[ticket.id]?.length ?? 0) > 0 && (
+                      <details className="mt-3 rounded-md border px-3 py-2">
+                        <summary className="cursor-pointer text-xs font-medium">Support replies ({ticketMessages[ticket.id].length})</summary>
+                        <div className="mt-3 space-y-3">
+                          {ticketMessages[ticket.id].map((message) => (
+                            <div key={message.id} className="border-t pt-2">
+                              <div className="text-[11px] font-medium">{message.author_id === viewerId ? "You" : "Office & Co support"}</div>
+                              <p className="mt-1 whitespace-pre-wrap text-xs">{message.message}</p>
+                              <p className="mt-1 text-[10px] text-muted-foreground">{new Date(message.created_at).toLocaleString()}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </div>
                   <Badge
                     variant={
@@ -895,21 +945,37 @@ export function OrganizationSupportView() {
 
 export function OrganizationBillingView() {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [venueRequests, setVenueRequests] = useState<UnionStationRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+  const [requestsRefreshKey, setRequestsRefreshKey] = useState(0);
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError("");
     void (async () => {
       const context = await getOrganizationContext();
       const supabase = getSupabaseClient();
       if (!supabase) throw new Error("Workspace data is not configured.");
-      const { data, error: invoiceError } = await supabase
-        .from("invoices")
-        .select("id,reference,amount_zar,status,issued_at,due_at,paid_at,metadata")
-        .eq("organization_id", context.organizationId)
-        .order("issued_at", { ascending: false });
-      if (invoiceError) throw invoiceError;
-      if (active) setInvoices((data ?? []) as InvoiceRow[]);
+      const [invoiceResult, requestResult] = await Promise.all([
+        supabase
+          .from("invoices")
+          .select("id,reference,amount_zar,status,issued_at,due_at,paid_at,metadata")
+          .eq("organization_id", context.organizationId)
+          .order("issued_at", { ascending: false }),
+        supabase
+          .from("union_station_requests")
+          .select("id,reference,event_type,event_date,status,estimate_zar")
+          .eq("organization_id", context.organizationId)
+          .order("created_at", { ascending: false }),
+      ]);
+      if (invoiceResult.error) throw invoiceResult.error;
+      if (requestResult.error) throw requestResult.error;
+      if (active) {
+        setInvoices((invoiceResult.data ?? []) as InvoiceRow[]);
+        setVenueRequests((requestResult.data ?? []) as UnionStationRequestRow[]);
+      }
     })()
       .catch((cause: unknown) => {
         if (active)
@@ -923,7 +989,7 @@ export function OrganizationBillingView() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [requestsRefreshKey]);
   const outstanding = invoices.filter(
     (invoice) => invoice.status !== "paid" && invoice.status !== "void",
   );
@@ -933,7 +999,7 @@ export function OrganizationBillingView() {
       <PageHeader
         eyebrow="Your Office & Co workspace"
         title="Billing"
-        description="Invoices and payments for your organization. This view shows organization charges, not Office & Co revenue."
+        description="Track issued invoices, payments, and Union Station event quotes linked to your organization."
       />
       {error && (
         <p
@@ -1003,6 +1069,43 @@ export function OrganizationBillingView() {
           )}
         </div>
       )}
+      {!loading && (
+        <section className="mt-8">
+          <div className="border-b pb-3">
+            <h2 className="font-display text-base font-semibold">Union Station requests &amp; quotes</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Quotes are not invoices. An invoice appears above once the venue team issues it.
+            </p>
+          </div>
+          {venueRequests.length ? (
+            <div className="divide-y">
+              {venueRequests.map((request) => (
+                <div key={request.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">{request.reference} · {request.event_type}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Event date {request.event_date}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {request.estimate_zar > 0 ? <span className="text-sm font-semibold">{formatZAR(request.estimate_zar)}</span> : null}
+                    <Badge variant={request.status === "quoted" || request.status === "invoiced" ? "default" : "outline"}>
+                      {request.status.replaceAll("_", " ")}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-4 text-sm text-muted-foreground">
+              No Union Station requests are linked to your organization yet. <Button type="button" variant="link" className="h-auto p-0 align-baseline font-medium text-brand underline underline-offset-4" onClick={() => setQuoteDialogOpen(true)}>Request a quote</Button>.
+            </p>
+          )}
+        </section>
+      )}
+      <UnionStationBookingDialog
+        open={quoteDialogOpen}
+        onOpenChange={setQuoteDialogOpen}
+        onSubmitted={() => setRequestsRefreshKey((key) => key + 1)}
+      />
     </div>
   );
 }

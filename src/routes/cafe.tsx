@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatZAR, branches, type CafeProduct, type Invoice, createInvoice, PAYSTACK_PUBLIC_KEY, loadInvoices, saveInvoices, downloadInvoicePdf, getRoleBranch, getRoleTenant } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
-import { Coffee, Plus, ShoppingBag, Minus, Trash2, ChefHat, Store, History, ReceiptText, CreditCard, Wallet, LoaderCircle, RefreshCw } from "lucide-react";
+import { BellRing, CheckCircle2, Coffee, Plus, ShoppingBag, Minus, Trash2, ChefHat, Store, History, ReceiptText, CreditCard, Wallet, LoaderCircle, RefreshCw, Package, Download, Upload, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
 
@@ -53,12 +53,16 @@ function createProductIllustration(product: Pick<CafeProduct, "name" | "category
 
 export const Route = createFileRoute("/cafe")({
   head: () => ({ meta: [{ title: "Café — WorkspaceOS" }] }),
+  validateSearch: (search: Record<string, unknown>): { view?: "kitchen" } => ({
+    ...(search.view === "kitchen" ? { view: "kitchen" } : {}),
+  }),
   component: Cafe,
 });
 
 const liveBranches = branches.filter(b => b.status === "live").map(b => b.name);
 const kitchenColumns = [
-  { status: "queued", label: "Queued", action: "Start preparing" },
+  { status: "queued", label: "New orders", action: "Accept order" },
+  { status: "accepted", label: "Accepted", action: "Start preparing" },
   { status: "preparing", label: "Preparing", action: "Mark ready" },
   { status: "ready", label: "Ready", action: "Mark collected" },
   { status: "collected", label: "Collected", action: null },
@@ -83,10 +87,14 @@ type CafeProductRow = {
 
 function Cafe() {
   const { role } = useRole();
+  const { view } = Route.useSearch();
   const isCafeManager = role.id === "cafe-manager";
   const isAdmin = ["branch-manager", "cafe-manager", "community-manager", "lydia-admin"].includes(role.id);
+  const canManagePantry = ["branch-manager", "cafe-manager"].includes(role.id);
+  const canReviewRestockRequests = role.id === "branch-manager";
   const defaultTab = isAdmin ? "admin" : "shop";
-  const [tab, setTab] = useState(defaultTab);
+  const initialTab = view === "kitchen" && isAdmin ? "kitchen" : defaultTab;
+  const [tab, setTab] = useState(initialTab);
   const [workBranch, setWorkBranch] = useState("");
   const branch = role.branch ?? (isCafeManager ? "" : workBranch || getRoleBranch(role.id) || "Bryanston");
   const shopBranch = workBranch || branch;
@@ -97,8 +105,8 @@ function Cafe() {
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    setTab(defaultTab);
-  }, [defaultTab]);
+    setTab(view === "kitchen" && isAdmin ? "kitchen" : defaultTab);
+  }, [defaultTab, isAdmin, view]);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -188,6 +196,7 @@ function Cafe() {
         <TabsList className="flex-wrap h-auto">
           {isAdmin && <TabsTrigger value="admin" className="gap-1.5"><ChefHat className="size-3.5" />Admin · Products</TabsTrigger>}
           {isAdmin && <TabsTrigger value="kitchen" className="gap-1.5"><Coffee className="size-3.5" />Kitchen board</TabsTrigger>}
+          {canManagePantry && <TabsTrigger value="pantry" className="gap-1.5"><Package className="size-3.5" />Pantry &amp; inventory</TabsTrigger>}
           <TabsTrigger value="shop" className="gap-1.5"><Store className="size-3.5" />Shop</TabsTrigger>
           <TabsTrigger value="orders" className="gap-1.5"><History className="size-3.5" />My orders</TabsTrigger>
         </TabsList>
@@ -196,6 +205,7 @@ function Cafe() {
         {productsError && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">Café catalog unavailable: {productsError}</p>}
         {isAdmin && <TabsContent value="admin"><AdminPanel defaultBranch={branch} canPickBranch={!isCafeManager} products={products} loading={productsLoading} onReload={() => setReloadKey((key) => key + 1)} /></TabsContent>}
         {isAdmin && <TabsContent value="kitchen"><KitchenBoard defaultBranch={branch} canPickBranch={!isCafeManager} /></TabsContent>}
+        {canManagePantry && <TabsContent value="pantry"><PantryBoard defaultBranch={branch} canPickBranch={role.id === "branch-manager"} canReviewRequests={canReviewRestockRequests} /></TabsContent>}
         <TabsContent value="shop"><Shop defaultBranch={shopBranch} canPickBranch={isAdmin && !isCafeManager} tenant={tenant} orderedBy={role.user} products={products} loading={productsLoading} /></TabsContent>
         <TabsContent value="orders"><MyOrders branch={branch} orderedBy={role.user} active={tab === "orders"} /></TabsContent>
       </Tabs>
@@ -409,6 +419,514 @@ function AdminPanel({
   );
 }
 
+type CafePantryItem = {
+  id: string;
+  branch_id: string;
+  name: string;
+  category: string;
+  unit: string;
+  quantity_on_hand: number;
+  reorder_level: number;
+  reorder_quantity: number;
+  vendor: string | null;
+  notes: string | null;
+};
+
+type CafeRestockRequest = {
+  id: string;
+  item_id: string;
+  branch_id: string;
+  requested_by: string;
+  quantity: number;
+  note: string | null;
+  status: string;
+  created_at: string;
+};
+
+type PantryImportRow = {
+  name: string;
+  category: string;
+  unit: string;
+  quantity: string;
+  reorderLevel: string;
+  reorderQuantity: string;
+  vendor: string;
+  notes: string;
+};
+
+const pantryCsvHeaders = ["name", "category", "unit", "on_hand", "reorder_level", "reorder_quantity", "supplier", "notes"];
+
+function parsePantryCsv(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  const source = text.replace(/^\uFEFF/, "");
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '"' && quoted && source[index + 1] === '"') {
+      field += '"';
+      index += 1;
+    } else if (character === '"') {
+      quoted = !quoted;
+    } else if (character === "," && !quoted) {
+      row.push(field.trim());
+      field = "";
+    } else if ((character === "\n" || character === "\r") && !quoted) {
+      if (character === "\r" && source[index + 1] === "\n") index += 1;
+      row.push(field.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += character;
+    }
+  }
+  if (quoted) throw new Error("The CSV contains an unclosed quoted field.");
+  row.push(field.trim());
+  if (row.some(Boolean)) rows.push(row);
+  return rows;
+}
+
+function escapeCsvValue(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+}
+
+function PantryBoard({
+  defaultBranch,
+  canPickBranch,
+  canReviewRequests,
+}: {
+  defaultBranch: string;
+  canPickBranch: boolean;
+  canReviewRequests: boolean;
+}) {
+  const [branch, setBranch] = useState(defaultBranch);
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [items, setItems] = useState<CafePantryItem[]>([]);
+  const [requests, setRequests] = useState<CafeRestockRequest[]>([]);
+  const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [savingItem, setSavingItem] = useState(false);
+  const [savingStockId, setSavingStockId] = useState<string | null>(null);
+  const [requestingItemId, setRequestingItemId] = useState<string | null>(null);
+  const [updatingRequestId, setUpdatingRequestId] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [itemDialogOpen, setItemDialogOpen] = useState(false);
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
+  const [csvFileName, setCsvFileName] = useState("");
+  const [csvRows, setCsvRows] = useState<PantryImportRow[]>([]);
+  const [csvError, setCsvError] = useState("");
+  const [importingCsv, setImportingCsv] = useState(false);
+  const [draft, setDraft] = useState({
+    name: "",
+    category: "Ingredients",
+    unit: "kg",
+    quantity: "0",
+    reorderLevel: "1",
+    reorderQuantity: "5",
+    vendor: "",
+    notes: "",
+  });
+
+  useEffect(() => setBranch(defaultBranch), [defaultBranch]);
+
+  useEffect(() => {
+    let active = true;
+    const loadPantry = async () => {
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        setError("Pantry data is not configured.");
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      const { data: availableBranches, error: branchError } = await supabase
+        .from("branches")
+        .select("id,name")
+        .order("name");
+      if (!active) return;
+      if (branchError) {
+        setError(branchError.message);
+        setLoading(false);
+        return;
+      }
+      const options = availableBranches ?? [];
+      setBranchOptions(options);
+      const branchId = options.find((option) => option.name === branch)?.id;
+      if (!branchId) {
+        setItems([]);
+        setRequests([]);
+        setError(branch ? "This account has no pantry access for the selected branch." : "Assign a branch to this account to manage its pantry.");
+        setLoading(false);
+        return;
+      }
+
+      const [itemResult, requestResult] = await Promise.all([
+        supabase
+          .from("cafe_pantry_items")
+          .select("id,branch_id,name,category,unit,quantity_on_hand,reorder_level,reorder_quantity,vendor,notes")
+          .eq("branch_id", branchId)
+          .eq("is_active", true)
+          .order("name"),
+        supabase
+          .from("cafe_restock_requests")
+          .select("id,item_id,branch_id,requested_by,quantity,note,status,created_at")
+          .eq("branch_id", branchId)
+          .order("created_at", { ascending: false })
+          .limit(100),
+      ]);
+      if (!active) return;
+      if (itemResult.error || requestResult.error) {
+        setError(itemResult.error?.message ?? requestResult.error?.message ?? "Pantry data could not be loaded.");
+        setItems([]);
+        setRequests([]);
+      } else {
+        setItems((itemResult.data ?? []) as CafePantryItem[]);
+        setRequests((requestResult.data ?? []) as CafeRestockRequest[]);
+        setError("");
+      }
+      setLoading(false);
+    };
+
+    void loadPantry();
+    return () => { active = false; };
+  }, [branch, reloadKey]);
+
+  const selectedBranchId = branchOptions.find((option) => option.name === branch)?.id;
+  const lowStockItems = items.filter((item) => Number(item.quantity_on_hand) <= Number(item.reorder_level));
+  const outstandingRequests = requests.filter((request) => ["requested", "approved", "ordered"].includes(request.status));
+  const itemName = (itemId: string) => items.find((item) => item.id === itemId)?.name ?? "Pantry item";
+  const csvRowErrors = csvRows.flatMap((row, index) => {
+    const rowNumber = index + 2;
+    const errors: string[] = [];
+    if (!row.name.trim()) errors.push(`Row ${rowNumber}: item name is required.`);
+    if (!row.unit.trim()) errors.push(`Row ${rowNumber}: unit is required.`);
+    const quantity = Number(row.quantity);
+    const reorderLevel = Number(row.reorderLevel);
+    const reorderQuantity = Number(row.reorderQuantity);
+    if (!row.quantity.trim() || !Number.isFinite(quantity) || quantity < 0) errors.push(`Row ${rowNumber}: on-hand quantity must be zero or more.`);
+    if (!row.reorderLevel.trim() || !Number.isFinite(reorderLevel) || reorderLevel < 0) errors.push(`Row ${rowNumber}: reorder level must be zero or more.`);
+    if (!row.reorderQuantity.trim() || !Number.isFinite(reorderQuantity) || reorderQuantity <= 0) errors.push(`Row ${rowNumber}: reorder quantity must be greater than zero.`);
+    const normalizedName = row.name.trim().toLocaleLowerCase();
+    if (normalizedName && items.some((item) => item.name.trim().toLocaleLowerCase() === normalizedName)) errors.push(`Row ${rowNumber}: ${row.name.trim()} already exists in this branch.`);
+    if (normalizedName && csvRows.slice(0, index).some((previous) => previous.name.trim().toLocaleLowerCase() === normalizedName)) errors.push(`Row ${rowNumber}: duplicate item name in this file.`);
+    return errors;
+  });
+
+  const downloadCsvTemplate = () => {
+    const rows = [
+      pantryCsvHeaders,
+      ["Full-cream milk", "Dairy", "L", "8", "3", "12", "Local supplier", "Keep refrigerated"],
+    ];
+    const csv = rows.map((row) => row.map(escapeCsvValue).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "pantry-inventory-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadPantryCsv = async (file?: File) => {
+    setCsvError("");
+    setCsvRows([]);
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setCsvError("CSV files must be 5 MB or smaller.");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setCsvError("Choose a .csv file.");
+      return;
+    }
+    try {
+      const records = parsePantryCsv(await file.text());
+      if (records.length < 2) throw new Error("The CSV needs a header row and at least one pantry item.");
+      const headers = records[0].map((header) => header.trim().toLowerCase().replace(/[\s-]+/g, "_"));
+      const headerIndex = new Map(headers.map((header, index) => [header, index]));
+      const findColumn = (record: string[], ...names: string[]) => {
+        for (const name of names) {
+          const index = headerIndex.get(name);
+          if (index !== undefined) return record[index] ?? "";
+        }
+        return "";
+      };
+      const parsedRows = records.slice(1).map((record): PantryImportRow => ({
+        name: findColumn(record, "name", "item", "item_name"),
+        category: findColumn(record, "category") || "Ingredients",
+        unit: findColumn(record, "unit", "uom"),
+        quantity: findColumn(record, "on_hand", "quantity_on_hand", "stock_quantity"),
+        reorderLevel: findColumn(record, "reorder_level", "reorder_point", "low_stock_threshold"),
+        reorderQuantity: findColumn(record, "reorder_quantity", "restock_quantity"),
+        vendor: findColumn(record, "supplier", "vendor"),
+        notes: findColumn(record, "notes", "description"),
+      }));
+      if (parsedRows.length > 500) throw new Error("Import at most 500 pantry rows at a time.");
+      setCsvFileName(file.name);
+      setCsvRows(parsedRows);
+    } catch (error) {
+      setCsvError(error instanceof Error ? error.message : "Could not read this CSV file.");
+    }
+  };
+
+  const importPantryCsv = async () => {
+    if (!selectedBranchId || csvRows.length === 0 || csvRowErrors.length > 0) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setImportingCsv(true);
+    const { data: auth } = await supabase.auth.getUser();
+    const { error: insertError } = await supabase.from("cafe_pantry_items").insert(csvRows.map((row) => ({
+      branch_id: selectedBranchId,
+      name: row.name.trim(),
+      category: row.category.trim() || "Ingredients",
+      unit: row.unit.trim(),
+      quantity_on_hand: Number(row.quantity),
+      reorder_level: Number(row.reorderLevel),
+      reorder_quantity: Number(row.reorderQuantity),
+      vendor: row.vendor.trim() || null,
+      notes: row.notes.trim() || null,
+      created_by: auth.user?.id ?? null,
+    })));
+    setImportingCsv(false);
+    if (insertError) {
+      setCsvError(insertError.message);
+      return;
+    }
+    const importedCount = csvRows.length;
+    setCsvImportOpen(false);
+    setCsvRows([]);
+    setCsvFileName("");
+    setCsvError("");
+    setReloadKey((key) => key + 1);
+    toast.success(`${importedCount} pantry ${importedCount === 1 ? "item" : "items"} imported.`);
+  };
+
+  const addItem = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedBranchId) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setSavingItem(true);
+    const { data: auth } = await supabase.auth.getUser();
+    const { error: insertError } = await supabase.from("cafe_pantry_items").insert({
+      branch_id: selectedBranchId,
+      name: draft.name.trim(),
+      category: draft.category.trim() || "Ingredients",
+      unit: draft.unit.trim() || "unit",
+      quantity_on_hand: Number(draft.quantity),
+      reorder_level: Number(draft.reorderLevel),
+      reorder_quantity: Number(draft.reorderQuantity),
+      vendor: draft.vendor.trim() || null,
+      notes: draft.notes.trim() || null,
+      created_by: auth.user?.id ?? null,
+    });
+    setSavingItem(false);
+    if (insertError) {
+      toast.error(insertError.message);
+      return;
+    }
+    setDraft({ name: "", category: "Ingredients", unit: "kg", quantity: "0", reorderLevel: "1", reorderQuantity: "5", vendor: "", notes: "" });
+    setItemDialogOpen(false);
+    setReloadKey((key) => key + 1);
+    toast.success("Pantry item added.");
+  };
+
+  const saveStockCount = async (item: CafePantryItem) => {
+    const quantity = Number(stockInputs[item.id] ?? item.quantity_on_hand);
+    if (!Number.isFinite(quantity) || quantity < 0) {
+      toast.error("On-hand quantity must be zero or more.");
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setSavingStockId(item.id);
+    const { error: updateError } = await supabase
+      .from("cafe_pantry_items")
+      .update({ quantity_on_hand: quantity })
+      .eq("id", item.id)
+      .eq("branch_id", item.branch_id);
+    setSavingStockId(null);
+    if (updateError) {
+      toast.error(updateError.message);
+      return;
+    }
+    setStockInputs((current) => ({ ...current, [item.id]: String(quantity) }));
+    setReloadKey((key) => key + 1);
+    toast.success(`${item.name} stock count updated.`);
+  };
+
+  const requestRestock = async (item: CafePantryItem) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setRequestingItemId(item.id);
+    const { data: auth } = await supabase.auth.getUser();
+    if (!auth.user) {
+      setRequestingItemId(null);
+      toast.error("Sign in to request replenishment.");
+      return;
+    }
+    const { error: insertError } = await supabase.from("cafe_restock_requests").insert({
+      item_id: item.id,
+      branch_id: item.branch_id,
+      requested_by: auth.user.id,
+      quantity: item.reorder_quantity,
+      note: `Low stock: ${item.quantity_on_hand} ${item.unit} remaining; reorder level is ${item.reorder_level} ${item.unit}.`,
+    });
+    setRequestingItemId(null);
+    if (insertError) {
+      toast.error(insertError.message);
+      return;
+    }
+    setReloadKey((key) => key + 1);
+    toast.success(`Restock request sent for ${item.name}.`);
+  };
+
+  const updateRequestStatus = async (request: CafeRestockRequest, status: string) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const { data: auth } = await supabase.auth.getUser();
+    setUpdatingRequestId(request.id);
+    const { error: updateError } = await supabase
+      .from("cafe_restock_requests")
+      .update({ status, reviewed_by: auth.user?.id ?? null, reviewed_at: new Date().toISOString() })
+      .eq("id", request.id);
+    setUpdatingRequestId(null);
+    if (updateError) {
+      toast.error(updateError.message);
+      return;
+    }
+    setReloadKey((key) => key + 1);
+    toast.success(status === "received" ? `${itemName(request.item_id)} marked received; pantry stock updated.` : "Restock request updated.");
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1.5">
+          <Label className="block text-xs">Pantry branch</Label>
+          {canPickBranch ? (
+            <Select value={branch} onValueChange={setBranch}>
+              <SelectTrigger className="w-55"><SelectValue placeholder="Select branch" /></SelectTrigger>
+              <SelectContent>{branchOptions.map((option) => <SelectItem key={option.id} value={option.name}>{option.name}</SelectItem>)}</SelectContent>
+            </Select>
+          ) : <Badge variant="outline" className="h-9 px-3">{branch || "No branch assigned"}</Badge>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => setReloadKey((key) => key + 1)}><RefreshCw className={`mr-1 size-3.5 ${loading ? "animate-spin" : ""}`} />Refresh</Button>
+          <Button type="button" size="sm" variant="outline" onClick={downloadCsvTemplate}><Download className="mr-1 size-4" />Download CSV template</Button>
+          <Dialog open={csvImportOpen} onOpenChange={setCsvImportOpen}>
+            <Button type="button" size="sm" variant="outline" onClick={() => setCsvImportOpen(true)} disabled={!selectedBranchId}><Upload className="mr-1 size-4" />Import CSV</Button>
+            <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Import pantry items</DialogTitle>
+                <DialogDescription>Upload the editable template for {branch || "this branch"}, review the rows, and correct any errors before importing.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pantry-csv-file">Pantry CSV file</Label>
+                  <Input id="pantry-csv-file" type="file" accept=".csv,text/csv" onChange={(event) => void loadPantryCsv(event.target.files?.[0])} />
+                  <p className="text-xs text-muted-foreground">Required columns: name, unit, on_hand, reorder_level, reorder_quantity. Category, supplier, and notes are optional.</p>
+                  {csvFileName && <p className="text-xs text-muted-foreground">{csvFileName} · {csvRows.length} rows ready</p>}
+                </div>
+                {csvError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{csvError}</p>}
+                {csvRowErrors.length > 0 && <div role="alert" className="max-h-28 overflow-y-auto rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning"><ul className="list-disc space-y-1 pl-4">{csvRowErrors.map((rowError) => <li key={rowError}>{rowError}</li>)}</ul></div>}
+                {csvRows.length > 0 && <div className="overflow-x-auto rounded-md border">
+                  <Table className="min-w-[1100px]">
+                    <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Category</TableHead><TableHead>Unit</TableHead><TableHead>On hand</TableHead><TableHead>Reorder level</TableHead><TableHead>Reorder qty</TableHead><TableHead>Supplier</TableHead><TableHead>Notes</TableHead><TableHead><span className="sr-only">Remove</span></TableHead></TableRow></TableHeader>
+                    <TableBody>{csvRows.map((row, index) => {
+                      const updateRow = (field: keyof PantryImportRow, value: string) => setCsvRows((current) => current.map((item, rowIndex) => rowIndex === index ? { ...item, [field]: value } : item));
+                      return <TableRow key={`${row.name}-${index}`}>
+                        <TableCell><Input aria-label={`Imported item name ${index + 1}`} className="h-8 min-w-32" maxLength={160} value={row.name} onChange={(event) => updateRow("name", event.target.value)} /></TableCell>
+                        <TableCell><Input aria-label={`Imported category ${index + 1}`} className="h-8 min-w-28" value={row.category} onChange={(event) => updateRow("category", event.target.value)} /></TableCell>
+                        <TableCell><Input aria-label={`Imported unit ${index + 1}`} className="h-8 w-20" value={row.unit} onChange={(event) => updateRow("unit", event.target.value)} /></TableCell>
+                        <TableCell><Input aria-label={`Imported on-hand quantity ${index + 1}`} className="h-8 w-24" type="number" min="0" step="0.01" value={row.quantity} onChange={(event) => updateRow("quantity", event.target.value)} /></TableCell>
+                        <TableCell><Input aria-label={`Imported reorder level ${index + 1}`} className="h-8 w-24" type="number" min="0" step="0.01" value={row.reorderLevel} onChange={(event) => updateRow("reorderLevel", event.target.value)} /></TableCell>
+                        <TableCell><Input aria-label={`Imported reorder quantity ${index + 1}`} className="h-8 w-24" type="number" min="0.01" step="0.01" value={row.reorderQuantity} onChange={(event) => updateRow("reorderQuantity", event.target.value)} /></TableCell>
+                        <TableCell><Input aria-label={`Imported supplier ${index + 1}`} className="h-8 min-w-28" value={row.vendor} onChange={(event) => updateRow("vendor", event.target.value)} /></TableCell>
+                        <TableCell><Input aria-label={`Imported notes ${index + 1}`} className="h-8 min-w-36" value={row.notes} onChange={(event) => updateRow("notes", event.target.value)} /></TableCell>
+                        <TableCell><Button type="button" size="icon" variant="ghost" aria-label={`Remove ${row.name || `row ${index + 1}`}`} onClick={() => setCsvRows((current) => current.filter((_, rowIndex) => rowIndex !== index))}><Trash2 className="size-4" /></Button></TableCell>
+                      </TableRow>;
+                    })}</TableBody>
+                  </Table>
+                </div>}
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setCsvImportOpen(false)} disabled={importingCsv}>Cancel</Button>
+                <Button type="button" onClick={() => void importPantryCsv()} disabled={importingCsv || csvRows.length === 0 || csvRowErrors.length > 0}>{importingCsv ? "Importing…" : `Import ${csvRows.length || ""} items`}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={itemDialogOpen} onOpenChange={setItemDialogOpen}>
+            <Button type="button" size="sm" onClick={() => setItemDialogOpen(true)} disabled={!selectedBranchId}><Plus className="mr-1 size-4" />Add pantry item</Button>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add pantry item</DialogTitle>
+                <DialogDescription>Track ingredients and supplies for {branch || "this branch"}.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={(event) => void addItem(event)} className="space-y-3">
+                <div className="space-y-1.5"><Label htmlFor="pantry-item-name">Item name</Label><Input id="pantry-item-name" required maxLength={160} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="e.g. Full-cream milk" /></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5"><Label htmlFor="pantry-category">Category</Label><Input id="pantry-category" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} placeholder="Ingredients" /></div>
+                  <div className="space-y-1.5"><Label htmlFor="pantry-unit">Unit</Label><Input id="pantry-unit" required value={draft.unit} onChange={(event) => setDraft({ ...draft, unit: event.target.value })} placeholder="kg, L, pack" /></div>
+                  <div className="space-y-1.5"><Label htmlFor="pantry-quantity">On hand</Label><Input id="pantry-quantity" type="number" min="0" step="0.01" required value={draft.quantity} onChange={(event) => setDraft({ ...draft, quantity: event.target.value })} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="pantry-reorder-level">Reorder level</Label><Input id="pantry-reorder-level" type="number" min="0" step="0.01" required value={draft.reorderLevel} onChange={(event) => setDraft({ ...draft, reorderLevel: event.target.value })} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="pantry-reorder-quantity">Reorder quantity</Label><Input id="pantry-reorder-quantity" type="number" min="0.01" step="0.01" required value={draft.reorderQuantity} onChange={(event) => setDraft({ ...draft, reorderQuantity: event.target.value })} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="pantry-vendor">Supplier</Label><Input id="pantry-vendor" value={draft.vendor} onChange={(event) => setDraft({ ...draft, vendor: event.target.value })} /></div>
+                </div>
+                <div className="space-y-1.5"><Label htmlFor="pantry-notes">Notes</Label><Textarea id="pantry-notes" rows={2} value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Storage or handling notes" /></div>
+                <DialogFooter><Button type="button" variant="outline" onClick={() => setItemDialogOpen(false)} disabled={savingItem}>Cancel</Button><Button type="submit" disabled={savingItem}>{savingItem ? "Saving…" : "Save item"}</Button></DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard label="Pantry items" value={loading ? "—" : String(items.length)} />
+        <StatCard label="Low stock" value={loading ? "—" : String(lowStockItems.length)} accent={lowStockItems.length ? "warning" : "success"} hint="At or below reorder level" />
+        <StatCard label="Open restock requests" value={loading ? "—" : String(outstandingRequests.length)} accent={outstandingRequests.length ? "brand" : "success"} />
+      </div>
+
+      {error && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">Pantry unavailable: {error}</p>}
+      <section className="overflow-hidden rounded-lg border bg-card">
+        <div className="border-b p-4"><h2 className="font-display text-base font-semibold">Pantry inventory</h2><p className="mt-1 text-xs text-muted-foreground">Update counts as ingredients are used. Low-stock items can be sent to the branch manager for replenishment.</p></div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Category</TableHead><TableHead>On hand</TableHead><TableHead>Reorder point</TableHead><TableHead>Supplier</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {loading ? <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground"><LoaderCircle className="mr-2 inline size-4 animate-spin" />Loading pantry</TableCell></TableRow> : items.map((item) => {
+                const lowStock = Number(item.quantity_on_hand) <= Number(item.reorder_level);
+                const hasOpenRequest = requests.some((request) => request.item_id === item.id && ["requested", "approved", "ordered"].includes(request.status));
+                return <TableRow key={item.id}>
+                  <TableCell><div className="font-medium">{item.name}</div>{item.notes && <div className="text-xs text-muted-foreground">{item.notes}</div>}</TableCell>
+                  <TableCell>{item.category}</TableCell>
+                  <TableCell><div className="flex items-center gap-2"><Input aria-label={`On-hand quantity for ${item.name}`} type="number" min="0" step="0.01" className="h-8 w-24 tabular-nums" value={stockInputs[item.id] ?? String(item.quantity_on_hand)} onChange={(event) => setStockInputs((current) => ({ ...current, [item.id]: event.target.value }))} /><span className="text-xs text-muted-foreground">{item.unit}</span>{lowStock && <Badge variant="outline" className="text-warning">Low</Badge>}</div></TableCell>
+                  <TableCell className="tabular-nums">{item.reorder_level} {item.unit}<div className="text-[11px] text-muted-foreground">Restock {item.reorder_quantity} {item.unit}</div></TableCell>
+                  <TableCell>{item.vendor || "—"}</TableCell>
+                  <TableCell className="text-right"><div className="inline-flex flex-wrap justify-end gap-1"><Button type="button" size="sm" variant="outline" disabled={savingStockId === item.id} onClick={() => void saveStockCount(item)}>{savingStockId === item.id ? "Saving…" : "Save count"}</Button><Button type="button" size="sm" disabled={!lowStock || hasOpenRequest || requestingItemId === item.id || canReviewRequests} onClick={() => void requestRestock(item)}>{requestingItemId === item.id ? "Sending…" : hasOpenRequest ? "Requested" : "Request restock"}</Button></div></TableCell>
+                </TableRow>;
+              })}
+              {!loading && !error && items.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">No pantry items for {branch}. Add ingredients and supplies to start tracking stock.</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+        </div>
+      </section>
+
+      <section className="overflow-hidden rounded-lg border bg-card">
+        <div className="border-b p-4"><h2 className="font-display text-base font-semibold">Restock requests</h2><p className="mt-1 text-xs text-muted-foreground">Kitchen requests notify the branch manager. Mark a request received to add its quantity to on-hand stock.</p></div>
+        {requests.length === 0 ? <p className="p-5 text-sm text-muted-foreground">No replenishment requests for this branch.</p> : <div className="divide-y">
+          {requests.map((request) => <div key={request.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div><div className="font-medium text-sm">{itemName(request.item_id)} · {request.quantity} {items.find((item) => item.id === request.item_id)?.unit ?? "unit"}</div><div className="mt-1 text-xs text-muted-foreground">{request.note || "No note"} · {new Date(request.created_at).toLocaleString()}</div></div>
+            {canReviewRequests ? <Select value={request.status} disabled={updatingRequestId === request.id || ["received", "declined"].includes(request.status)} onValueChange={(status) => void updateRequestStatus(request, status)}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent>{["requested", "approved", "ordered", "received", "declined"].map((status) => <SelectItem key={status} value={status}>{status[0].toUpperCase() + status.slice(1)}</SelectItem>)}</SelectContent></Select> : <Badge variant={request.status === "received" ? "secondary" : "outline"}>{request.status}</Badge>}
+          </div>)}
+        </div>}
+      </section>
+    </div>
+  );
+}
+
 function createEmptyCafeProduct(branch: string): CafeProduct {
   return {
     id: "",
@@ -481,11 +999,35 @@ type CafeKitchenOrder = {
   created_at: string;
 };
 
+function playCafeOrderAlertSound(context: AudioContext) {
+  if (context.state !== "running") return;
+  const startAt = context.currentTime;
+  [784, 988, 1174].forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const noteStart = startAt + index * 0.16;
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, noteStart);
+    gain.gain.exponentialRampToValueAtTime(0.14, noteStart + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.24);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(noteStart);
+    oscillator.stop(noteStart + 0.25);
+  });
+}
+
 function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string; canPickBranch: boolean }) {
   const [branch, setBranch] = useState(defaultBranch);
   const [branchNames, setBranchNames] = useState<Record<string, string>>({});
   const [branchOptions, setBranchOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [orders, setOrders] = useState<CafeKitchenOrder[]>([]);
+  const [newOrderAlertIds, setNewOrderAlertIds] = useState<string[]>([]);
+  const [orderSoundEnabled, setOrderSoundEnabled] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const seenOrderIds = useRef(new Set<string>());
+  const hasLoadedOrderSnapshot = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -494,6 +1036,8 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
   useEffect(() => {
     setBranch(defaultBranch);
   }, [defaultBranch]);
+
+  const selectedBranchId = branchOptions.find((option) => option.name === branch)?.id;
 
   useEffect(() => {
     let active = true;
@@ -519,9 +1063,22 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
         setOrders([]);
       } else {
         const options = branchResult.data ?? [];
+        const loadedOrders = (orderResult.data ?? []) as CafeKitchenOrder[];
+        const incomingOrders = hasLoadedOrderSnapshot.current
+          ? loadedOrders.filter((order) => order.status.toLowerCase() === "queued" && !seenOrderIds.current.has(order.id))
+          : [];
+        loadedOrders.forEach((order) => seenOrderIds.current.add(order.id));
+        hasLoadedOrderSnapshot.current = true;
+        if (incomingOrders.length) {
+          setNewOrderAlertIds((current) => [...new Set([...current, ...incomingOrders.map((order) => order.id)])]);
+        }
         setBranchOptions(options);
         setBranchNames(Object.fromEntries(options.map(({ id, name }) => [id, name])));
-        setOrders((orderResult.data ?? []) as CafeKitchenOrder[]);
+        setOrders((current) => {
+          const merged = new Map(current.map((order) => [order.id, order]));
+          loadedOrders.forEach((order) => merged.set(order.id, order));
+          return [...merged.values()].sort((first, second) => second.created_at.localeCompare(first.created_at));
+        });
         setError("");
       }
       setLoading(false);
@@ -535,16 +1092,69 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
     };
   }, [refreshKey]);
 
-  const selectedBranchId = branchOptions.find((option) => option.name === branch)?.id;
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase || !selectedBranchId) return;
+    const channel = supabase
+      .channel(`cafe-orders-${selectedBranchId}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "cafe_orders",
+        filter: `branch_id=eq.${selectedBranchId}`,
+      }, (payload) => {
+        const order = payload.new as CafeKitchenOrder;
+        if (!order?.id) return;
+        seenOrderIds.current.add(order.id);
+        setOrders((current) => current.some((existing) => existing.id === order.id) ? current : [order, ...current]);
+        setNewOrderAlertIds((current) => current.includes(order.id) ? current : [...current, order.id]);
+      })
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [selectedBranchId]);
+
   const branchOrders = branch
     ? orders.filter((order) => Boolean(selectedBranchId) && order.branch_id === selectedBranchId)
     : orders;
+  const incomingOrder = branchOrders.find((order) => newOrderAlertIds.includes(order.id) && order.status.toLowerCase() === "queued");
+  useEffect(() => {
+    if (!incomingOrder || !orderSoundEnabled) return;
+    const playAlert = () => {
+      const context = audioContextRef.current;
+      if (context) playCafeOrderAlertSound(context);
+    };
+    playAlert();
+    const interval = window.setInterval(playAlert, 15_000);
+    return () => window.clearInterval(interval);
+  }, [incomingOrder?.id, orderSoundEnabled]);
+
+  const waitingForAcceptance = branchOrders.filter((order) => order.status.toLowerCase() === "queued");
   const today = new Date().toISOString().slice(0, 10);
   const month = today.slice(0, 7);
   const ordersToday = branchOrders.filter((order) => order.created_at.startsWith(today));
   const ordersThisMonth = branchOrders.filter((order) => order.created_at.startsWith(month));
   const accountOrders = ordersThisMonth.filter((order) => order.method.toLowerCase() === "charge to account").length;
   const accountShare = ordersThisMonth.length ? `${Math.round((accountOrders / ordersThisMonth.length) * 100)}%` : "0%";
+
+  const toggleOrderSound = async (enabled: boolean) => {
+    if (!enabled) {
+      setOrderSoundEnabled(false);
+      return;
+    }
+    if (typeof window.AudioContext === "undefined") {
+      toast.error("This browser does not support kitchen alert sounds.");
+      return;
+    }
+    try {
+      const context = audioContextRef.current ?? new window.AudioContext();
+      audioContextRef.current = context;
+      await context.resume();
+      setOrderSoundEnabled(true);
+      if (!incomingOrder) playCafeOrderAlertSound(context);
+    } catch {
+      toast.error("Could not enable kitchen alert sound. Check your browser audio settings.");
+    }
+  };
 
   const advanceOrder = async (order: CafeKitchenOrder, nextStatus: string) => {
     const supabase = getSupabaseClient();
@@ -558,6 +1168,9 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
       toast.error(updateError?.message ?? "Order status could not be updated.");
     } else {
       setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: nextStatus } : item));
+      if (nextStatus === "accepted") {
+        setNewOrderAlertIds((current) => current.filter((id) => id !== order.id));
+      }
       toast.success(`Order moved to ${nextStatus}.`);
     }
     setUpdatingId(null);
@@ -575,15 +1188,32 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
             </Select>
           ) : <Badge variant="outline" className="h-9 px-3">{branch || "No branch assigned"}</Badge>}
         </div>
-        <Button type="button" size="sm" variant="outline" className="gap-1.5" disabled={loading} onClick={() => setRefreshKey((key) => key + 1)}>
-          <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 items-center gap-2 rounded-md border px-3">
+            {orderSoundEnabled ? <Volume2 className="size-4 text-success" /> : <VolumeX className="size-4 text-muted-foreground" />}
+            <span className="text-xs">Order sound</span>
+            <Switch checked={orderSoundEnabled} onCheckedChange={(enabled) => void toggleOrderSound(enabled)} aria-label="Enable new-order alert sound" />
+          </div>
+          <Button type="button" size="sm" variant="outline" className="gap-1.5" disabled={loading} onClick={() => setRefreshKey((key) => key + 1)}>
+            <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />Refresh
+          </Button>
+        </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Waiting acceptance" value={String(waitingForAcceptance.length)} accent={waitingForAcceptance.length ? "warning" : "success"} />
         <StatCard label="Orders today" value={String(ordersToday.length)} accent="brand" />
         <StatCard label="Café revenue (month)" value={formatZAR(ordersThisMonth.reduce((sum, order) => sum + Number(order.amount_zar), 0))} accent="success" />
         <StatCard label="Charge to account" value={accountShare} hint="of this month's orders" />
       </div>
+      {waitingForAcceptance.length > 0 && (
+        <div role="status" aria-live="polite" className="flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning/10 px-4 py-3">
+          <div>
+            <div className="text-sm font-semibold">{waitingForAcceptance.length} order{waitingForAcceptance.length === 1 ? "" : "s"} waiting for acceptance</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">Review each order and accept it before preparation begins.</div>
+          </div>
+          <Badge variant="outline" className="border-warning/40 text-warning">New</Badge>
+        </div>
+      )}
       {error && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">Kitchen orders unavailable: {error}</p>}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {kitchenColumns.map((column) => {
@@ -598,7 +1228,7 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
                 {loading && orders.length === 0 ? (
                   <p className="py-4 text-center text-xs text-muted-foreground">Loading orders…</p>
                 ) : columnOrders.map((order) => (
-                  <div key={order.id} className="card-soft space-y-3 p-3">
+                  <div key={order.id} className={`card-soft space-y-3 p-3 ${newOrderAlertIds.includes(order.id) ? "border-warning/60 ring-1 ring-warning/20" : ""}`}>
                     <div className="flex items-start gap-2">
                       <div className="grid size-8 shrink-0 place-items-center rounded-md bg-warning/15 text-warning"><Coffee className="size-4" /></div>
                       <div className="min-w-0 flex-1">
@@ -611,7 +1241,7 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
                       </div>
                     </div>
                     {column.action && (
-                      <Button type="button" size="sm" variant="outline" className="h-7 w-full" disabled={updatingId === order.id} onClick={() => void advanceOrder(order, kitchenColumns[kitchenColumns.findIndex((item) => item.status === column.status) + 1].status)}>
+                      <Button type="button" size="sm" variant={column.status === "queued" ? "default" : "outline"} className="h-8 w-full" disabled={updatingId === order.id} onClick={() => void advanceOrder(order, kitchenColumns[kitchenColumns.findIndex((item) => item.status === column.status) + 1].status)}>
                         {updatingId === order.id ? "Updating…" : column.action}
                       </Button>
                     )}
@@ -623,6 +1253,33 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
           );
         })}
       </div>
+      {incomingOrder && (
+        <div role="alertdialog" aria-modal="true" aria-labelledby="incoming-cafe-order-title" className="fixed inset-0 z-[100] flex min-h-screen items-center justify-center overflow-y-auto bg-[#070a0e] px-4 py-8 text-white">
+          <div className="w-full max-w-2xl">
+            <div className="mb-8 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300"><BellRing className="size-5" />New café order</div>
+              <Badge className="border border-amber-300/30 bg-amber-300/10 text-amber-200">Needs acceptance</Badge>
+            </div>
+            <div className="text-sm font-medium text-white/55">ORDER NUMBER</div>
+            <div className="mt-1 font-mono text-2xl font-semibold tracking-wider">#{incomingOrder.id.slice(0, 8).toUpperCase()}</div>
+            <h1 id="incoming-cafe-order-title" className="mt-8 font-display text-4xl font-semibold sm:text-5xl">Incoming order</h1>
+            <p className="mt-3 text-base text-white/65">{incomingOrder.purchaser_name || incomingOrder.organization_name || "Café customer"} · {branchNames[incomingOrder.branch_id] ?? branch}</p>
+            <section className="mt-8 border-y border-white/15 py-6">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">Items ordered</h2>
+              <p className="mt-3 whitespace-pre-wrap text-2xl font-medium leading-relaxed sm:text-3xl">{incomingOrder.item}</p>
+              <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/60">
+                <span>{incomingOrder.method}</span>
+                <span>{formatZAR(Number(incomingOrder.amount_zar))}</span>
+                <span>{new Date(incomingOrder.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+              </div>
+            </section>
+            <Button type="button" size="lg" disabled={updatingId === incomingOrder.id} onClick={() => void advanceOrder(incomingOrder, "accepted")} className="mt-8 h-14 w-full gap-2 bg-emerald-400 text-base font-semibold text-black hover:bg-emerald-300">
+              <CheckCircle2 className="size-5" />{updatingId === incomingOrder.id ? "Accepting order…" : "Accept order"}
+            </Button>
+            <button type="button" onClick={() => setNewOrderAlertIds((current) => current.filter((id) => id !== incomingOrder.id))} className="mt-4 w-full py-3 text-sm text-white/50 hover:text-white/80">Dismiss alert · keep in New orders</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -690,7 +1347,7 @@ function Shop({ defaultBranch, canPickBranch, tenant, orderedBy, products, loadi
   const checkout = async (method: "Charge to account" | "Cash on Delivery" | "Paystack") => {
     if (cartItems.length === 0) return;
     if (method === "Charge to account" && !tenant) {
-      toast.error("Charge to account is available to registered organization members.");
+      toast.error("Charge to account is for registered tenant members. Choose Cash on Delivery or Paystack to place this order.");
       return;
     }
     const supabase = getSupabaseClient();

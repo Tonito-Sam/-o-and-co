@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LifeBuoy, RefreshCw } from "lucide-react";
+import { LifeBuoy, MessageSquare, RefreshCw, Send } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
 import { OrganizationSupportView } from "@/components/tenant/OrganizationViews";
@@ -18,7 +21,11 @@ type Ticket = {
   reference: string | null;
   branch_id: string | null;
   tenant_id: string | null;
+  raised_by: string | null;
+  requester_name: string | null;
+  organization_name: string | null;
   subject: string;
+  body: string | null;
   priority: string;
   status: string;
   sla_due_at: string | null;
@@ -26,9 +33,17 @@ type Ticket = {
   branches: { name: string } | { name: string }[] | null;
 };
 
+type TicketMessage = {
+  id: string;
+  ticket_id: string;
+  author_id: string;
+  message: string;
+  created_at: string;
+};
+
 function Support() {
   const { role } = useRole();
-  if (role.id === "organization-admin" || role.id === "organization-member") {
+  if (["tenant-admin", "organization-admin", "organization-member"].includes(role.id)) {
     return <OrganizationSupportView />;
   }
   return <OperationsSupport />;
@@ -37,6 +52,13 @@ function Support() {
 function OperationsSupport() {
   const { role } = useRole();
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>([]);
+  const [reply, setReply] = useState("");
+  const [replyError, setReplyError] = useState("");
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sendingReply, setSendingReply] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const branchScope = role.id === "branch-manager" ? (role.branchIds ?? []).join(",") : "all";
@@ -53,7 +75,7 @@ function OperationsSupport() {
     let query = supabase
       .from("support_tickets")
       .select(
-        "id,reference,branch_id,tenant_id,subject,priority,status,sla_due_at,created_at,branches(name)",
+        "id,reference,branch_id,tenant_id,raised_by,requester_name,organization_name,subject,body,priority,status,sla_due_at,created_at,branches(name)",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -75,6 +97,82 @@ function OperationsSupport() {
   useEffect(() => {
     void loadTickets();
   }, [loadTickets]);
+
+  const openTicket = async (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setTicketMessages([]);
+    setReply("");
+    setReplyError("");
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setLoadingMessages(true);
+    const { data, error: messageError } = await supabase
+      .from("support_ticket_messages")
+      .select("id,ticket_id,author_id,message,created_at")
+      .eq("ticket_id", ticket.id)
+      .order("created_at", { ascending: true });
+    setLoadingMessages(false);
+    if (messageError) {
+      toast.error(messageError.message);
+      return;
+    }
+    setTicketMessages((data ?? []) as TicketMessage[]);
+  };
+
+  const sendReply = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const message = reply.trim();
+    if (!selectedTicket || !message) return;
+    setReplyError("");
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setReplyError("The support service is unavailable. Try again later.");
+      return;
+    }
+    setSendingReply(true);
+    try {
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) {
+        setReplyError("Your session has expired. Sign in again to reply.");
+        return;
+      }
+      const { data, error: insertError } = await supabase
+        .from("support_ticket_messages")
+        .insert({ ticket_id: selectedTicket.id, author_id: auth.user.id, message })
+        .select("id,ticket_id,author_id,message,created_at")
+        .single();
+      if (insertError) {
+        setReplyError(insertError.message);
+        return;
+      }
+      setTicketMessages((current) => [...current, data as TicketMessage]);
+      setReply("");
+      toast.success("Reply sent to the requester.");
+    } catch (cause) {
+      setReplyError(cause instanceof Error ? cause.message : "Could not send your reply.");
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  const updateTicketStatus = async (status: "open" | "in_progress" | "resolved") => {
+    if (!selectedTicket) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setUpdatingStatus(true);
+    const { error: updateError } = await supabase
+      .from("support_tickets")
+      .update({ status })
+      .eq("id", selectedTicket.id);
+    setUpdatingStatus(false);
+    if (updateError) {
+      toast.error(updateError.message);
+      return;
+    }
+    setSelectedTicket({ ...selectedTicket, status });
+    setTickets((current) => current.map((ticket) => ticket.id === selectedTicket.id ? { ...ticket, status } : ticket));
+    toast.success(status === "resolved" ? "Ticket resolved." : "Ticket status updated.");
+  };
 
   const openTickets = useMemo(
     () => tickets.filter((ticket) => !["resolved", "closed"].includes(ticket.status)),
@@ -166,10 +264,12 @@ function OperationsSupport() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-sm">
+            <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="border-b bg-muted/30 text-[11px] uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-medium">Reference</th>
+                  <th className="px-4 py-3 font-medium">Sender</th>
+                  <th className="px-4 py-3 font-medium">Organization</th>
                   {role.id === "group-ceo" ? (
                     <th className="px-4 py-3 font-medium">Branch</th>
                   ) : null}
@@ -193,10 +293,16 @@ function OperationsSupport() {
                       <td className="px-4 py-3 font-mono text-xs">
                         {ticket.reference ?? ticket.id.slice(0, 8)}
                       </td>
+                      <td className="px-4 py-3">{ticket.requester_name ?? "Unknown requester"}</td>
+                      <td className="px-4 py-3">{ticket.organization_name ?? "Not linked"}</td>
                       {role.id === "group-ceo" ? (
                         <td className="px-4 py-3">{branch?.name ?? "Unassigned"}</td>
                       ) : null}
-                      <td className="px-4 py-3 font-medium">{ticket.subject}</td>
+                      <td className="px-4 py-3 font-medium">
+                        <Button type="button" variant="link" className="h-auto whitespace-normal p-0 text-left" onClick={() => void openTicket(ticket)}>
+                          <MessageSquare className="mr-1 size-3.5 shrink-0" />{ticket.subject}
+                        </Button>
+                      </td>
                       <td className="px-4 py-3">
                         <Badge
                           variant={
@@ -232,6 +338,53 @@ function OperationsSupport() {
           </div>
         )}
       </section>
+
+      <Dialog open={selectedTicket !== null} onOpenChange={(open) => { if (!open) setSelectedTicket(null); }}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          {selectedTicket && <>
+            <DialogHeader>
+              <DialogTitle>{selectedTicket.subject}</DialogTitle>
+              <DialogDescription>
+                {selectedTicket.reference ?? selectedTicket.id.slice(0, 8)} · {selectedTicket.priority} priority · {selectedTicket.status.replaceAll("_", " ")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="rounded-md border bg-muted/30 p-3">
+                <div className="text-xs font-medium">Original request</div>
+                <p className="mt-2 whitespace-pre-wrap text-sm">{selectedTicket.body || "No description provided."}</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">{new Date(selectedTicket.created_at).toLocaleString()}</p>
+              </div>
+              {loadingMessages ? (
+                <p className="py-4 text-sm text-muted-foreground">Loading replies…</p>
+              ) : ticketMessages.map((message) => (
+                <div key={message.id} className="rounded-md border p-3">
+                  <div className="text-xs font-medium">{message.author_id === selectedTicket.raised_by ? "Requester" : "Support team"}</div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm">{message.message}</p>
+                  <p className="mt-2 text-[11px] text-muted-foreground">{new Date(message.created_at).toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+            <form onSubmit={(event) => void sendReply(event)} className="space-y-2">
+              <Label htmlFor="support-ticket-reply">Reply to requester</Label>
+              <Textarea id="support-ticket-reply" required maxLength={5000} rows={4} value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Write a response…" />
+              {replyError && <p role="alert" className="text-sm text-destructive">{replyError}</p>}
+              <Button type="submit" disabled={sendingReply || !reply.trim()} className="gap-2">
+                <Send className="size-4" />{sendingReply ? "Sending…" : "Send reply"}
+              </Button>
+            </form>
+            <DialogFooter>
+              {selectedTicket.status !== "in_progress" && selectedTicket.status !== "resolved" && selectedTicket.status !== "closed" && (
+                <Button variant="outline" disabled={updatingStatus} onClick={() => void updateTicketStatus("in_progress")}>Mark in progress</Button>
+              )}
+              {selectedTicket.status === "resolved" || selectedTicket.status === "closed" ? (
+                <Button variant="outline" disabled={updatingStatus} onClick={() => void updateTicketStatus("open")}>Reopen ticket</Button>
+              ) : (
+                <Button disabled={updatingStatus} onClick={() => void updateTicketStatus("resolved")}>Resolve ticket</Button>
+              )}
+            </DialogFooter>
+          </>}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

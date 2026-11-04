@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BrandLogo } from "@/components/BrandLogo";
+import { UnionStationBookingDialog } from "@/components/UnionStationBookingDialog";
 import { VirtualTour } from "@/components/VirtualTour";
 import bryanstonImg from "@/assets/space-bryanston.jpg";
 import rosebankImg from "@/assets/space-rosebank.jpg";
@@ -46,6 +47,9 @@ export const Route = createFileRoute("/welcome")({
       },
       { property: "og:type", content: "website" },
     ],
+  }),
+  validateSearch: (search: Record<string, unknown>): { unionBooking?: "open" } => ({
+    ...(search.unionBooking === "open" ? { unionBooking: "open" } : {}),
   }),
   component: Welcome,
 });
@@ -85,7 +89,13 @@ const heroSlides = [
 /* ------------------------------------------------------------------ */
 function Welcome() {
   const nav = useNavigate();
+  const { unionBooking } = Route.useSearch();
   const [activeTour, setActiveTour] = useState<Tour | null>(null);
+  const [unionBookingOpen, setUnionBookingOpen] = useState(false);
+
+  useEffect(() => {
+    if (unionBooking === "open") setUnionBookingOpen(true);
+  }, [unionBooking]);
 
   return (
     <div className="bg-background">
@@ -94,7 +104,10 @@ function Welcome() {
       <ChooseYourNeed onOpenTour={(id) => setActiveTour(tours[id])} />
       <Locations onOpenTour={(id) => setActiveTour(tours[id])} />
       <Experience />
-      <UnionStationFeature onOpenTour={() => setActiveTour(tours["union-station"])} />
+      <UnionStationFeature
+        onOpenTour={() => setActiveTour(tours["union-station"])}
+        onOpenBooking={() => setUnionBookingOpen(true)}
+      />
       <Proof />
       <FAQ />
       <BookingSection />
@@ -110,10 +123,17 @@ function Welcome() {
         onRequestTour={(tourId) => {
           setActiveTour(null);
           if (tourId === "union-station") {
-            nav({ to: "/union-station" });
+            setUnionBookingOpen(true);
             return;
           }
           nav({ to: "/tour-request", search: { branch: tourId } });
+        }}
+      />
+      <UnionStationBookingDialog
+        open={unionBookingOpen}
+        onOpenChange={(open) => {
+          setUnionBookingOpen(open);
+          if (!open && unionBooking === "open") nav({ to: "/welcome", search: {}, replace: true });
         }}
       />
     </div>
@@ -469,7 +489,7 @@ function Experience() {
 /* ------------------------------------------------------------------ */
 /* UNION STATION — elevated first-class events path                    */
 /* ------------------------------------------------------------------ */
-function UnionStationFeature({ onOpenTour }: { onOpenTour: () => void }) {
+function UnionStationFeature({ onOpenTour, onOpenBooking }: { onOpenTour: () => void; onOpenBooking: () => void }) {
   const tour = tours["union-station"];
   return (
     <section id="union-station" className="py-16 md:py-24 bg-primary text-primary-foreground relative overflow-hidden">
@@ -505,10 +525,8 @@ function UnionStationFeature({ onOpenTour }: { onOpenTour: () => void }) {
             >
               <Play className="size-4" /> Virtual tour
             </Button>
-            <Button asChild variant="secondary" className="gap-1.5">
-              <Link to="/union-station">
-                Book Union Station <ArrowRight className="size-4" />
-              </Link>
+            <Button type="button" variant="secondary" className="gap-1.5" onClick={onOpenBooking}>
+              Book Union Station <ArrowRight className="size-4" />
             </Button>
           </div>
         </div>

@@ -48,10 +48,12 @@ function TourRequest() {
 
   return (
     <AuthLayout
-      eyebrow="Book a tour"
-      title="See Office & Co in person."
-      subtitle="Share your details and we’ll update you with available date and time to choose from"
-      footer={<>Already have an account? <a href="/auth/sign-in" className="text-brand font-medium hover:underline">Sign in</a></>}
+      eyebrow={branch === "union-station" ? "Union Station · physical visit" : "Book a tour"}
+      title={branch === "union-station" ? "See Union Station in person." : "See Office & Co in person."}
+      subtitle={branch === "union-station"
+        ? "Enter your contact details first, then choose a date and time for your hosted venue visit. No account is needed."
+        : "Enter your contact details first, then choose your preferred tour date and time. No account is needed."}
+      footer={<>No account is needed. Existing tenants can <a href="/auth/sign-in" className="text-brand font-medium hover:underline">sign in</a> to link this request.</>}
     >
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1.5">
@@ -70,8 +72,8 @@ function TourRequest() {
           <Label htmlFor="company">Company</Label>
           <Input id="company" required placeholder="Your company" value={form.company} onChange={(e) => setForm((prev) => ({ ...prev, company: e.target.value }))} />
         </div>
-        <Button type="submit" className="w-full" disabled={submitting}>{submitting ? "Saving details…" : "Book a tour"}</Button>
-        <p className="text-[11px] text-muted-foreground">Your tour request is saved to the CRM before you choose a date and time.</p>
+        <Button type="submit" className="w-full" disabled={submitting}>{submitting ? "Saving details…" : branch === "union-station" ? "Choose a visit time" : "Book a tour"}</Button>
+        <p className="text-[11px] text-muted-foreground">Your details are saved to the CRM before you choose a date and time. No sign-in or sign-up is required.</p>
       </form>
     </AuthLayout>
   );

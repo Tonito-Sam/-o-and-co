@@ -13,7 +13,6 @@ import {
   Coffee,
   ShoppingBag,
   LifeBuoy,
-  Bell,
   BarChart3,
   MessageSquare,
   Landmark,
@@ -21,6 +20,7 @@ import {
   Settings,
   Radar,
   UserRound,
+  ClipboardList,
 } from "lucide-react";
 import {
   Sidebar,
@@ -68,7 +68,6 @@ const nav = [
       { title: "Bookings", url: "/bookings", icon: CalendarRange },
       { title: "Union Station", url: "/union-station", icon: Landmark },
       { title: "Union Station Admin", url: "/union-station-admin", icon: BarChart3 },
-      { title: "Support", url: "/support", icon: LifeBuoy },
     ],
   },
   {
@@ -85,9 +84,9 @@ const nav = [
     label: "Platform",
     items: [
       { title: "Messages", url: "/messaging", icon: MessageSquare },
-      { title: "Notifications", url: "/notifications", icon: Bell },
       { title: "Organization", url: "/organization", icon: Building2 },
       { title: "Account", url: "/account", icon: UserRound },
+      { title: "Support", url: "/support", icon: LifeBuoy },
       { title: "Role Settings", url: "/settings/roles", icon: Settings },
     ],
   },
@@ -124,7 +123,6 @@ const salesManagerNav = [
     label: "Team Tools",
     items: [
       { title: "Messages", url: "/messaging", icon: MessageSquare },
-      { title: "Notifications", url: "/notifications", icon: Bell },
     ],
   },
 ];
@@ -168,6 +166,17 @@ const branchManagerNav = nav.map((group) =>
     : group,
 );
 
+const cafeManagerNav = nav.map((group) =>
+  group.label === "Community & Commerce"
+    ? {
+        ...group,
+        items: group.items.flatMap((item) => item.url === "/cafe"
+          ? [item, { title: "Orders", url: "/cafe?view=kitchen", icon: ClipboardList }]
+          : [item]),
+      }
+    : group,
+);
+
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { role, canAccessUrl } = useRole();
@@ -180,7 +189,9 @@ export function AppSidebar() {
         ? salesManagerNav
         : role.id === "branch-manager"
           ? branchManagerNav
-          : nav.map((group) =>
+            : role.id === "cafe-manager"
+              ? cafeManagerNav
+              : nav.map((group) =>
               group.label === "Revenue" ? { ...group, label: revenueGroupLabel } : group,
             );
 

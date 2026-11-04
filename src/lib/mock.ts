@@ -1139,7 +1139,6 @@ export const ROLES: RoleDef[] = [
       "/cafe",
       "/community",
       "/content",
-      "/events",
       "/marketplace",
       "/billing",
       "/analytics",
@@ -1149,7 +1148,7 @@ export const ROLES: RoleDef[] = [
     ],
     communityModules: {
       community: true,
-      events: true,
+      events: false,
       marketplace: true,
       cafe: true,
       content: true,
@@ -1178,11 +1177,9 @@ export const ROLES: RoleDef[] = [
     scope: "Organization workspace",
     nav: [
       "/",
-      "/facilities",
       "/bookings",
       "/billing",
       "/community",
-      "/events",
       "/cafe",
       "/marketplace",
       "/content",
@@ -1194,7 +1191,7 @@ export const ROLES: RoleDef[] = [
     ],
     communityModules: {
       community: true,
-      events: true,
+      events: false,
       marketplace: true,
       cafe: true,
       content: true,

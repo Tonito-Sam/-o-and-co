@@ -135,6 +135,7 @@ function isPublicRoute(pathname: string) {
     pathname === "/welcome" ||
     pathname.startsWith("/welcome/") ||
     pathname.startsWith("/checkin") ||
+    pathname === "/union-station" ||
     pathname === "/tour-calendar" ||
     pathname === "/tour-request"
   );
@@ -166,10 +167,12 @@ function RootComponent() {
     let active = true;
     const officeRoles = new Set([
       "superadmin",
+      "group_admin",
       "group_ceo",
       "sales_manager",
       "rosebank_sales",
       "branch_manager",
+      "cafe_manager",
       "community_manager",
       "finance",
     ]);

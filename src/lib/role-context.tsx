@@ -82,7 +82,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const supabase = getSupabaseClient();
-    if (!supabase) return;
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
 
     let active = true;
     const roleMap: Record<string, RoleId> = {
@@ -220,9 +223,18 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     void supabase.auth.getUser().then(({ data, error }) => {
       if (!active) return;
       if (error || !data.user) {
+        setRoleId("member");
+        setUserName(null);
+        setIsLoading(false);
         return;
       }
       void loadIdentity(data.user.id, data.user.email);
+    }).catch((error: unknown) => {
+      if (!active) return;
+      console.error("Authentication identity lookup failed:", error);
+      setRoleId("member");
+      setUserName(null);
+      setIsLoading(false);
     });
 
     const {
@@ -239,6 +251,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         setAssignedBranchIds([]);
         setAssignedBranchNames([]);
         setHasGlobalBranchAccess(false);
+        setIsLoading(false);
         return;
       }
       window.setTimeout(() => void loadIdentity(session.user.id, session.user.email), 0);
@@ -343,25 +356,31 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
   const canAccessUrl = useCallback(
     (url: string) => {
-      if (url === "/content") return true;
-      if (["/union-station", "/union-station-admin"].includes(url) && role.id === "branch-manager") {
+      const path = url.split("?")[0];
+      if (path === "/notifications") return false;
+      if (path === "/content") return true;
+      if (
+        ["tenant-admin", "organization-admin", "organization-member"].includes(role.id) &&
+        ["/facilities", "/events"].includes(path)
+      ) return false;
+      if (["/union-station", "/union-station-admin"].includes(path) && role.id === "branch-manager") {
         const assignedBranches = role.branchNames?.length
           ? role.branchNames
           : [role.branch ?? ""];
         return (
-          role.nav.includes(url) &&
+          role.nav.includes(path) &&
           assignedBranches.some((branch) => branch.trim().toLowerCase() === "kyalami")
         );
       }
-      if (!role.nav.includes(url)) return false;
+      if (!role.nav.includes(path)) return false;
       if (role.id === "organization-admin" || role.id === "organization-member") {
-        if (sharedOrganizationRoutes.has(url)) return true;
-        const requiredSections = organizationRouteSections[url];
+        if (sharedOrganizationRoutes.has(path)) return true;
+        const requiredSections = organizationRouteSections[path];
         if (requiredSections) {
           return (organizationSections ?? []).some((section) => requiredSections.includes(section));
         }
       }
-      const key = urlToKey.get(url);
+      const key = urlToKey.get(path);
       if (!key) return true;
       // Group CEO master switch
       if (role.id === "group-ceo" && !showCommunity) return false;

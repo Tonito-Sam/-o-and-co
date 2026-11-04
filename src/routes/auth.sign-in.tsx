@@ -10,11 +10,17 @@ import { getSupabaseClient } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth/sign-in")({
   head: () => ({ meta: [{ title: "Sign in — Office & Co WorkspaceOS" }] }),
+  validateSearch: (search: Record<string, unknown>): { returnTo?: "/union-station" | "welcome-union-station" } => ({
+    ...(search.returnTo === "/union-station" || search.returnTo === "welcome-union-station"
+      ? { returnTo: search.returnTo }
+      : {}),
+  }),
   component: SignIn,
 });
 
 function SignIn() {
   const nav = useNavigate();
+  const { returnTo } = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,7 +42,11 @@ function SignIn() {
     }
 
     toast.success("Signed in successfully.");
-    nav({ to: "/" });
+    if (returnTo === "welcome-union-station") {
+      nav({ to: "/welcome", search: { unionBooking: "open" } });
+    } else {
+      nav({ to: returnTo ?? "/" });
+    }
   };
 
   return (

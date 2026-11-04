@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DoorOpen, RefreshCw, Search } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
@@ -29,7 +29,9 @@ type FacilityRecord = {
 };
 
 function Facilities() {
-  const { role } = useRole();
+  const { role, isLoading } = useRole();
+  const navigate = useNavigate();
+  const isTenant = ["tenant-admin", "organization-admin", "organization-member"].includes(role.id);
   const isBranchManager = role.id === "branch-manager";
   const assignedBranchIds = useMemo(
     () => isBranchManager ? role.branchIds ?? [] : [],
@@ -45,7 +47,15 @@ function Facilities() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (!isLoading && isTenant) void navigate({ to: "/", replace: true });
+  }, [isLoading, isTenant, navigate]);
+
   const loadFacilities = useCallback(async () => {
+    if (isLoading || isTenant) {
+      setLoading(false);
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) {
       setError("Workspace data is not configured.");
@@ -177,7 +187,7 @@ function Facilities() {
     setFacilities(portfolioInventory.filter((item) => item.branch_name) as FacilityRecord[]);
     setError("");
     setLoading(false);
-  }, [assignedBranchIds, assignedBranchNames, isBranchManager]);
+  }, [assignedBranchIds, assignedBranchNames, isBranchManager, isLoading, isTenant]);
 
   useEffect(() => {
     void loadFacilities();
@@ -221,6 +231,8 @@ function Facilities() {
         ? "Live facility and office-space inventory across your assigned branches."
         : `Live facility and office-space inventory for ${branches[0]?.name ?? role.branch ?? "your assigned branch"}.`
       : "Live office and desk inventory for your assigned branch.";
+
+  if (isLoading || isTenant) return null;
 
   return (
     <div className="mx-auto max-w-350 space-y-5">
