@@ -8,7 +8,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   vite: {
-    base: process.env.NODE_ENV === "production" ? "https://app.officeandco.co.za/" : "/",
+    base: process.env.NODE_ENV === "production" ? "https://oandco.ggempire.co.za/" : "/",
     envPrefix: ["VITE_", "PUBLIC_URL", "PUBLISHABLE_KEY", "SUPABASE_PUBLIC_ANON_KEY"],
     resolve: {
       tsconfigPaths: true,
