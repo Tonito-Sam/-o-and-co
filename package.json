@@ -8,7 +8,11 @@
     "build": "node ./node_modules/vite/bin/vite.js build",
     "build:dev": "node ./node_modules/vite/bin/vite.js build --mode development",
     "preview": "node ./node_modules/vite/bin/vite.js preview",
-    "lint": "eslint .",
+    "lint": "node ./node_modules/eslint/bin/eslint.js .",
+    "lint:production": "node ./node_modules/eslint/bin/eslint.js src/routes/crm.tsx src/routes/analytics.tsx src/routes/cafe.tsx src/routes/support.tsx src/routes/union-station.tsx --rule prettier/prettier:off",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
+    "check:live-data": "node scripts/check-live-data.mjs",
+    "check:production": "npm run typecheck && npm run lint:production && npm run check:live-data && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {

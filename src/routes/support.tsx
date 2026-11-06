@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
 import { OrganizationSupportView } from "@/components/tenant/OrganizationViews";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/support")({
   head: () => ({ meta: [{ title: "Support — WorkspaceOS" }] }),

@@ -15,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { LoaderCircle, Mail, MessageSquare, RotateCcw, Save } from "lucide-react";
-import { leads, stages, formatZAR, type Lead } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -31,7 +30,16 @@ function CrmRoute() {
   return role.id === "group-ceo" ? <SalesAnalyticsDashboard /> : <CRM />;
 }
 
-type LeadRecord = (typeof leads)[number] & {
+type LeadRecord = {
+  id: string;
+  company: string;
+  contact: string;
+  source: string;
+  stage: string;
+  value: number;
+  score: number;
+  branch: string;
+  owner: string;
   organizationId?: string | null;
   opportunityType?: "workspace" | "event" | "other";
   tourAt?: string | null;
@@ -68,26 +76,25 @@ type CrmEmailTemplate = {
 
 type TemplateDraft = Pick<CrmEmailTemplate, "name" | "subject" | "body" | "enabled">;
 
-const templatePreviewValues: Record<string, string> = {
-  contact_name: "Alex",
-  company_name: "Example Company",
-  branch_name: "Rosebank",
-  available_spaces: "[Current matching spaces and prices]",
-  availability_checked_at: "[time checked before sending]",
-  reply_summary: "[summary of the prospect's reply]",
-  tour_date: "[tour date]",
-  tour_time: "[tour time]",
-  tour_location: "[branch address]",
-  proposal_link: "[proposal link]",
-  contract_link: "[contract link]",
-  onboarding_link: "[onboarding link]",
-};
+const stages = [
+  "New Lead",
+  "Contacted",
+  "Qualified",
+  "Tour Scheduled",
+  "Proposal Sent",
+  "Negotiation",
+  "Contract Sent",
+  "Contract Signed",
+  "Onboarding",
+  "Active Tenant",
+  "Lost",
+] as const;
 
-function previewTemplate(value: string) {
-  return value.replace(/\{\{([a-z_]+)\}\}/gi, (placeholder, key: string) =>
-    templatePreviewValues[key] ?? placeholder,
-  );
-}
+const formatZAR = (amount: number) => new Intl.NumberFormat("en-ZA", {
+  style: "currency",
+  currency: "ZAR",
+  maximumFractionDigits: 0,
+}).format(amount);
 
 function EmailTemplateManager() {
   const { role } = useRole();
@@ -306,8 +313,8 @@ function EmailTemplateManager() {
         <section className="border-t pt-5">
           <h3 className="text-xs font-semibold uppercase text-muted-foreground">Preview</h3>
           <div className="mt-3 space-y-2 rounded-md border bg-muted/20 p-4 text-sm">
-            <p><span className="font-medium">Subject: </span>{previewTemplate(draft.subject)}</p>
-            <pre className="whitespace-pre-wrap font-sans text-sm">{previewTemplate(draft.body)}</pre>
+            <p><span className="font-medium">Subject: </span>{draft.subject}</p>
+            <pre className="whitespace-pre-wrap font-sans text-sm">{draft.body}</pre>
           </div>
         </section>
 
@@ -454,6 +461,8 @@ function CRM() {
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
   const [selectedStage, setSelectedStage] = useState<(typeof stages)[number]>(stages[0]);
   const [crmLeads, setCrmLeads] = useState<LeadRecord[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(true);
+  const [leadsError, setLeadsError] = useState("");
   const [organizations, setOrganizations] = useState<CrmOrganization[]>([]);
   const [branches, setBranches] = useState<CrmBranch[]>([]);
   const [leaseDialogOpen, setLeaseDialogOpen] = useState(false);
@@ -468,7 +477,12 @@ function CRM() {
 
   useEffect(() => {
     const supabase = getSupabaseClient();
-    if (!supabase) return;
+    if (!supabase) {
+      setLeadsError("CRM records are unavailable because Supabase is not configured.");
+      setLeadsLoading(false);
+      return;
+    }
+    let active = true;
     void Promise.all([
       supabase
         .from("leads")
@@ -478,8 +492,9 @@ function CRM() {
       supabase.from("organizations").select("id,name").order("name"),
       supabase.from("branches").select("id,name").eq("status", "live").order("name"),
     ]).then(([leadResult, activityResult, organizationResult, branchResult]) => {
+      if (!active) return;
       if (leadResult.error) {
-        toast.error(`Could not load CRM leads: ${leadResult.error.message}`);
+        setLeadsError(leadResult.error.message);
         return;
       }
       const branchNames = new Map((branchResult.data ?? []).map((branch) => [branch.id, branch.name]));
@@ -516,7 +531,13 @@ function CRM() {
       else setOrganizations((organizationResult.data ?? []) as CrmOrganization[]);
       if (branchResult.error) toast.error(branchResult.error.message);
       else setBranches((branchResult.data ?? []) as CrmBranch[]);
+      setLeadsError("");
+    }).catch((error: unknown) => {
+      if (active) setLeadsError(error instanceof Error ? error.message : "Could not load CRM leads.");
+    }).finally(() => {
+      if (active) setLeadsLoading(false);
     });
+    return () => { active = false; };
   }, []);
 
   const byStage = useMemo(
@@ -683,6 +704,17 @@ function CRM() {
     setLeaseDialogOpen(false);
     toast.success("Signed lease recorded and tenant activated.");
   };
+
+  if (activeView === "pipeline" && (leadsLoading || leadsError)) {
+    return (
+      <div className="mx-auto max-w-375">
+        <PageHeader eyebrow="CRM & Sales Automation" title="Pipeline" description="Registered enquiries and tour requests through qualification, contract, and tenant activation." />
+        {leadsLoading
+          ? <p className="py-10 text-sm text-muted-foreground">Loading persisted CRM records…</p>
+          : <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">CRM records unavailable: {leadsError}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-375">

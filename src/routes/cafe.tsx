@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -11,55 +11,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatZAR, branches, type CafeProduct, type Invoice, createInvoice, PAYSTACK_PUBLIC_KEY, loadInvoices, saveInvoices, downloadInvoicePdf, getRoleBranch, getRoleTenant } from "@/lib/mock";
+import { formatZAR, type CafeProduct, type Invoice, downloadInvoicePdf } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
 import { BellRing, CheckCircle2, Coffee, Plus, ShoppingBag, Minus, Trash2, ChefHat, Store, History, ReceiptText, CreditCard, Wallet, LoaderCircle, RefreshCw, Package, Download, Upload, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
 
-type PaystackPopup = { openIframe: () => void };
-
-declare global {
-  interface Window {
-    PaystackPop?: {
-      setup: (options: {
-        key: string;
-        email: string;
-        amount: number;
-        currency: string;
-        ref: string;
-        label?: string;
-        onClose?: () => void;
-        callback?: (response: { reference: string }) => void;
-      }) => PaystackPopup;
-    };
+function CafeProductImage({ product, className }: { product: CafeProduct; className: string }) {
+  if (!product.image) {
+    return (
+      <div className={`grid place-items-center bg-muted text-muted-foreground ${className}`} aria-label={`${product.name} image unavailable`}>
+        <Coffee className="size-6" aria-hidden="true" />
+      </div>
+    );
   }
-}
-
-function createProductIllustration(product: Pick<CafeProduct, "name" | "category" | "branch">) {
-  const colors = ["#7c3aed", "#0f766e", "#ea580c", "#2563eb", "#b45309"];
-  const color = colors[product.name.length % colors.length];
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
-      <rect width="800" height="500" rx="36" fill="#f7f3ff"/>
-      <rect x="42" y="42" width="716" height="416" rx="28" fill="${color}" fill-opacity="0.13"/>
-      <circle cx="620" cy="180" r="120" fill="${color}" fill-opacity="0.2"/>
-      <rect x="92" y="300" width="300" height="70" rx="18" fill="${color}" fill-opacity="0.22"/>
-      <text x="92" y="190" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="700" fill="#111827">${product.name}</text>
-      <text x="92" y="240" font-family="Inter, Arial, sans-serif" font-size="24" fill="#374151">${product.category} · ${product.branch}</text>
-    </svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  return <img src={product.image} alt={product.name} className={className} />;
 }
 
 export const Route = createFileRoute("/cafe")({
   head: () => ({ meta: [{ title: "Café — WorkspaceOS" }] }),
-  validateSearch: (search: Record<string, unknown>): { view?: "kitchen" } => ({
+  validateSearch: (search: Record<string, unknown>): { view?: "kitchen"; payment_reference?: string } => ({
     ...(search.view === "kitchen" ? { view: "kitchen" } : {}),
+    ...(typeof search.payment_reference === "string" && /^oco-cafe-[0-9a-f-]{36}-[0-9a-f-]{36}$/i.test(search.payment_reference)
+      ? { payment_reference: search.payment_reference }
+      : {}),
   }),
   component: Cafe,
 });
 
-const liveBranches = branches.filter(b => b.status === "live").map(b => b.name);
 const kitchenColumns = [
   { status: "queued", label: "New orders", action: "Accept order" },
   { status: "accepted", label: "Accepted", action: "Start preparing" },
@@ -87,7 +66,9 @@ type CafeProductRow = {
 
 function Cafe() {
   const { role } = useRole();
-  const { view } = Route.useSearch();
+  const paystackEnabled = import.meta.env.VITE_CAFE_PAYSTACK_ENABLED === "true";
+  const { view, payment_reference: paymentReference } = Route.useSearch();
+  const navigate = useNavigate();
   const isCafeManager = role.id === "cafe-manager";
   const isAdmin = ["branch-manager", "cafe-manager", "community-manager", "lydia-admin"].includes(role.id);
   const canManagePantry = ["branch-manager", "cafe-manager"].includes(role.id);
@@ -96,13 +77,43 @@ function Cafe() {
   const initialTab = view === "kitchen" && isAdmin ? "kitchen" : defaultTab;
   const [tab, setTab] = useState(initialTab);
   const [workBranch, setWorkBranch] = useState("");
-  const branch = role.branch ?? (isCafeManager ? "" : workBranch || getRoleBranch(role.id) || "Bryanston");
-  const shopBranch = workBranch || branch;
-  const tenant = role.tenant ?? getRoleTenant(role.id);
+  const [branchOptions, setBranchOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const liveBranches = branchOptions.map(({ name }) => name);
+  const assignedBranch = branchOptions.find(({ id }) => role.branchIds?.includes(id))?.name ?? "";
+  const organizationScoped = ["tenant-admin", "organization-admin", "organization-member"].includes(role.id);
+  const branch = organizationScoped
+    ? role.branch ?? ""
+    : isCafeManager || role.id === "branch-manager" || role.id === "community-manager"
+      ? assignedBranch || workBranch
+      : assignedBranch || workBranch || liveBranches[0] || "";
+  const canPickCafeBranch = (role.branchIds?.length ?? 0) > 1;
   const [products, setProducts] = useState<CafeProduct[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    if (!paymentReference) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Payment status cannot be checked because Supabase is not configured.");
+      return;
+    }
+    let active = true;
+    void supabase.functions.invoke("verify-cafe-payment", { body: { reference: paymentReference } })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) toast.error(`Could not verify café payment: ${error.message}`);
+        else if (data?.paid) {
+          toast.success("Payment confirmed. Your order is in the café queue.");
+          setTab("orders");
+        } else toast.info("Payment is still processing. Your order will enter the kitchen queue after confirmation.");
+      })
+      .finally(() => {
+        if (active) void navigate({ to: "/cafe", search: {}, replace: true });
+      });
+    return () => { active = false; };
+  }, [navigate, paymentReference]);
 
   useEffect(() => {
     setTab(view === "kitchen" && isAdmin ? "kitchen" : defaultTab);
@@ -149,14 +160,16 @@ function Cafe() {
         .from("cafe_products")
         .select("id,branch_id,name,category,description,price_zar,image_url,vendor,is_available,is_popular,is_active,track_inventory,stock_quantity,low_stock_threshold")
         .eq("is_active", true),
-      supabase.from("branches").select("id,name"),
+      supabase.from("branches").select("id,name").eq("status", "live").order("name"),
     ]).then(([productResult, branchResult]) => {
       if (!active) return;
       if (productResult.error || branchResult.error) {
         setProductsError(productResult.error?.message ?? branchResult.error?.message ?? "Could not load the café catalog.");
         setProducts([]);
       } else {
-        const branchNames = new Map((branchResult.data ?? []).map(({ id, name }) => [id, name]));
+        const branches = branchResult.data ?? [];
+        setBranchOptions(branches);
+        const branchNames = new Map(branches.map(({ id, name }) => [id, name]));
         setProducts(((productResult.data ?? []) as CafeProductRow[]).map((product) => ({
           id: product.id,
           branch: branchNames.get(product.branch_id) ?? "Unknown branch",
@@ -201,13 +214,13 @@ function Cafe() {
           <TabsTrigger value="orders" className="gap-1.5"><History className="size-3.5" />My orders</TabsTrigger>
         </TabsList>
 
-        {isCafeManager && !branch && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">This Café Manager account has no branch assigned. Ask an administrator to assign the correct branch before managing café stock.</p>}
+        {(["cafe-manager", "branch-manager", "community-manager"].includes(role.id)) && !branch && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">This account has no authorized café branch. Ask an administrator to assign the correct branch before using café operations.</p>}
         {productsError && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">Café catalog unavailable: {productsError}</p>}
-        {isAdmin && <TabsContent value="admin"><AdminPanel defaultBranch={branch} canPickBranch={!isCafeManager} products={products} loading={productsLoading} onReload={() => setReloadKey((key) => key + 1)} /></TabsContent>}
-        {isAdmin && <TabsContent value="kitchen"><KitchenBoard defaultBranch={branch} canPickBranch={!isCafeManager} /></TabsContent>}
+        {isAdmin && <TabsContent value="admin"><AdminPanel defaultBranch={branch} liveBranches={liveBranches} canPickBranch={canPickCafeBranch} products={products} loading={productsLoading} onReload={() => setReloadKey((key) => key + 1)} /></TabsContent>}
+        {isAdmin && <TabsContent value="kitchen"><KitchenBoard defaultBranch={branch} canPickBranch={canPickCafeBranch} /></TabsContent>}
         {canManagePantry && <TabsContent value="pantry"><PantryBoard defaultBranch={branch} canPickBranch={role.id === "branch-manager"} canReviewRequests={canReviewRestockRequests} /></TabsContent>}
-        <TabsContent value="shop"><Shop defaultBranch={shopBranch} canPickBranch={isAdmin && !isCafeManager} tenant={tenant} orderedBy={role.user} products={products} loading={productsLoading} /></TabsContent>
-        <TabsContent value="orders"><MyOrders branch={branch} orderedBy={role.user} active={tab === "orders"} /></TabsContent>
+        <TabsContent value="shop"><Shop defaultBranch={branch} liveBranches={liveBranches} canPickBranch={isAdmin && canPickCafeBranch} paystackEnabled={paystackEnabled} products={products} loading={productsLoading} /></TabsContent>
+        <TabsContent value="orders"><MyOrders branch={branch} active={tab === "orders"} /></TabsContent>
       </Tabs>
     </div>
   );
@@ -217,12 +230,14 @@ function Cafe() {
 
 function AdminPanel({
   defaultBranch,
+  liveBranches,
   canPickBranch,
   products,
   loading,
   onReload,
 }: {
   defaultBranch: string;
+  liveBranches: string[];
   canPickBranch: boolean;
   products: CafeProduct[];
   loading: boolean;
@@ -234,6 +249,10 @@ function AdminPanel({
   const [editing, setEditing] = useState<CafeProduct | null>(null);
   const [saving, setSaving] = useState(false);
   const [stockInputs, setStockInputs] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setBranch(defaultBranch);
+  }, [defaultBranch]);
 
   const branchProducts = products.filter(p => p.branch === branch);
   const stats = {
@@ -1027,7 +1046,7 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
   const [newOrderAlertIds, setNewOrderAlertIds] = useState<string[]>([]);
   const [orderSoundEnabled, setOrderSoundEnabled] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const seenOrderIds = useRef(new Set<string>());
+  const previousOrderStatuses = useRef(new Map<string, string>());
   const hasLoadedOrderSnapshot = useRef(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1066,9 +1085,9 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
         const options = branchResult.data ?? [];
         const loadedOrders = (orderResult.data ?? []) as CafeKitchenOrder[];
         const incomingOrders = hasLoadedOrderSnapshot.current
-          ? loadedOrders.filter((order) => order.status.toLowerCase() === "queued" && !seenOrderIds.current.has(order.id))
+          ? loadedOrders.filter((order) => order.status.toLowerCase() === "queued" && previousOrderStatuses.current.get(order.id) !== "queued")
           : [];
-        loadedOrders.forEach((order) => seenOrderIds.current.add(order.id));
+        loadedOrders.forEach((order) => previousOrderStatuses.current.set(order.id, order.status.toLowerCase()));
         hasLoadedOrderSnapshot.current = true;
         if (incomingOrders.length) {
           setNewOrderAlertIds((current) => [...new Set([...current, ...incomingOrders.map((order) => order.id)])]);
@@ -1099,16 +1118,22 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
     const channel = supabase
       .channel(`cafe-orders-${selectedBranchId}`)
       .on("postgres_changes", {
-        event: "INSERT",
+        event: "*",
         schema: "public",
         table: "cafe_orders",
         filter: `branch_id=eq.${selectedBranchId}`,
       }, (payload) => {
         const order = payload.new as CafeKitchenOrder;
         if (!order?.id) return;
-        seenOrderIds.current.add(order.id);
-        setOrders((current) => current.some((existing) => existing.id === order.id) ? current : [order, ...current]);
-        setNewOrderAlertIds((current) => current.includes(order.id) ? current : [...current, order.id]);
+        const status = order.status.toLowerCase();
+        const previousStatus = previousOrderStatuses.current.get(order.id);
+        previousOrderStatuses.current.set(order.id, status);
+        setOrders((current) => current.some((existing) => existing.id === order.id)
+          ? current.map((existing) => existing.id === order.id ? order : existing)
+          : [order, ...current]);
+        if (status === "queued" && previousStatus !== "queued") {
+          setNewOrderAlertIds((current) => current.includes(order.id) ? current : [...current, order.id]);
+        }
       })
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
@@ -1119,7 +1144,7 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
     : orders;
   const incomingOrder = branchOrders.find((order) => newOrderAlertIds.includes(order.id) && order.status.toLowerCase() === "queued");
   useEffect(() => {
-    if (!incomingOrder || !orderSoundEnabled) return;
+    if (!incomingOrder?.id || !orderSoundEnabled) return;
     const playAlert = () => {
       const context = audioContextRef.current;
       if (context) playCafeOrderAlertSound(context);
@@ -1287,14 +1312,31 @@ function KitchenBoard({ defaultBranch, canPickBranch }: { defaultBranch: string;
 
 // ────────────────── Tenant shop ──────────────────
 
-function Shop({ defaultBranch, canPickBranch, tenant, orderedBy, products, loading }: { defaultBranch: string; canPickBranch: boolean; tenant?: string; orderedBy: string; products: CafeProduct[]; loading: boolean }) {
+type CafeCheckoutResult = {
+  order_id: string;
+  branch_id: string;
+  branch_name: string;
+  invoice_id: string | null;
+  invoice_reference: string | null;
+  organization_name: string;
+  purchaser_name: string;
+  items: Invoice["items"];
+  amount_zar: number;
+  method: string;
+  payment_status: string;
+  due_date: string | null;
+  created_at: string;
+};
+
+function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, products, loading }: { defaultBranch: string; liveBranches: string[]; canPickBranch: boolean; paystackEnabled: boolean; products: CafeProduct[]; loading: boolean }) {
   const [branch, setBranch] = useState(defaultBranch);
   const [cat, setCat] = useState<string>("All");
   const [cart, setCart] = useState<Record<string, number>>({});
   const [paymentMode, setPaymentMode] = useState<"charge" | "cash_on_delivery" | "paystack">("charge");
-  const [invoicePreview, setInvoicePreview] = useState<string | null>(null);
+  const [invoicePreview, setInvoicePreview] = useState<Invoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
-  const [paystackReady, setPaystackReady] = useState(false);
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const checkoutRequest = useRef<{ signature: string; id: string } | null>(null);
 
   useEffect(() => {
     setBranch(defaultBranch);
@@ -1316,130 +1358,78 @@ function Shop({ defaultBranch, canPickBranch, tenant, orderedBy, products, loadi
   };
   const dec = (id: string) => setCart(c => { const n = (c[id] ?? 0) - 1; const next = { ...c }; if (n <= 0) delete next[id]; else next[id] = n; return next; });
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.PaystackPop) {
-      setPaystackReady(true);
-      return;
-    }
-    const existing = document.querySelector('script[src="https://js.paystack.co/v1/inline.js"]');
-    if (existing) {
-      existing.addEventListener("load", () => setPaystackReady(Boolean(window.PaystackPop)), { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://js.paystack.co/v1/inline.js";
-    script.async = true;
-    script.onload = () => setPaystackReady(Boolean(window.PaystackPop));
-    script.onerror = () => toast.error("Paystack could not be loaded. Please try again shortly.");
-    document.body.appendChild(script);
-  }, []);
-
   const cartItems = Object.entries(cart).map(([id, qty]) => {
     const p = products.find(x => x.id === id)!;
     return { ...p, qty };
   });
   const subtotal = cartItems.reduce((s, i) => s + i.price * i.qty, 0);
-  const total = subtotal;
-  const previewInvoice = invoicePreview
-    ? loadInvoices().find((entry) => entry.id === invoicePreview) ?? null
-    : null;
 
   const checkout = async (method: "Charge to account" | "Cash on Delivery" | "Paystack") => {
-    if (cartItems.length === 0) return;
-    if (method === "Charge to account" && !tenant) {
-      toast.error("Charge to account is for registered tenant members. Choose Cash on Delivery or Paystack to place this order.");
-      return;
-    }
+    if (cartItems.length === 0 || placingOrder) return;
     const supabase = getSupabaseClient();
     if (!supabase) {
       toast.error("Orders cannot be saved because Supabase is not configured.");
       return;
     }
-    const [{ data: userResult, error: userError }, { data: branchResult, error: branchError }] = await Promise.all([
-      supabase.auth.getUser(),
-      supabase.from("branches").select("id").eq("name", branch).maybeSingle(),
-    ]);
-    if (userError || !userResult.user) {
-      toast.error(userError?.message ?? "Sign in before placing a café order.");
-      return;
-    }
-    if (branchError || !branchResult) {
-      toast.error(branchError?.message ?? "The selected café branch could not be found.");
-      return;
-    }
-    let organizationId: string | null = null;
-    if (tenant) {
-      const { data: organization } = await supabase
-        .from("organizations")
+    setPlacingOrder(true);
+    try {
+      const { data: branchRow, error: branchError } = await supabase
+        .from("branches")
         .select("id")
-        .eq("name", tenant)
+        .eq("name", branch)
+        .eq("status", "live")
         .maybeSingle();
-      organizationId = organization?.id ?? null;
-    }
-    const invoice = createInvoice({
-      tenant: tenant ?? "Public customer",
-      orderedBy,
-      amount: total,
-      status: method === "Charge to account" ? "Sent" : method === "Paystack" ? "Pending verification" : "Unpaid",
-      due: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-      method,
-      items: cartItems.map((item) => ({ name: item.name, qty: item.qty, price: item.price, image: item.image })),
-      branch,
-      kind: "cafe",
-      note: `${branch} café order via ${method}`,
-    });
-    const { error: orderError } = await supabase.from("cafe_orders").insert({
-      branch_id: branchResult.id,
-      profile_id: userResult.user.id,
-      item: cartItems.map((item) => `${item.qty}× ${item.name}`).join(", "),
-      amount_zar: Math.round(total),
-      method,
-      status: "queued",
-      invoice_id: invoice.id,
-      organization_id: organizationId,
-      organization_name: tenant ?? "Public customer",
-      purchaser_name: orderedBy,
-      items: invoice.items,
-      payment_status: invoice.status,
-      due_date: invoice.due,
-    });
-    if (orderError) {
-      saveInvoices(loadInvoices().filter((entry) => entry.id !== invoice.id));
-      setInvoicePreview(null);
-      toast.error(`Order could not be saved: ${orderError.message}`);
-      return;
-    }
-    const invoices = loadInvoices();
-    const latest = invoices.find((entry) => entry.id === invoice.id);
-    setInvoicePreview(latest?.id ?? null);
-    if (method === "Paystack") {
-      if (typeof window === "undefined" || !window.PaystackPop || !paystackReady) {
-        toast.info("Loading Paystack modal…");
+      if (branchError || !branchRow) throw new Error(branchError?.message ?? "The selected café branch is unavailable.");
+
+      const requestItems = cartItems.map((item) => ({ product_id: item.id, quantity: item.qty }));
+      const signature = JSON.stringify({ branch_id: branchRow.id, method, items: requestItems });
+      if (checkoutRequest.current?.signature !== signature) {
+        checkoutRequest.current = { signature, id: crypto.randomUUID() };
+      }
+      const { data, error } = await supabase.rpc("create_cafe_order", {
+        p_branch_id: branchRow.id,
+        p_items: requestItems,
+        p_method: method,
+        p_request_id: checkoutRequest.current.id,
+      });
+      if (error) throw new Error(error.message);
+
+      const order = data as CafeCheckoutResult;
+      checkoutRequest.current = null;
+      setCart({});
+      if (method === "Paystack") {
+        const { data: payment, error: paymentError } = await supabase.functions.invoke("initialize-cafe-payment", {
+          body: { order_id: order.order_id },
+        });
+        if (paymentError) throw new Error(paymentError.message);
+        if (typeof payment?.authorization_url !== "string") throw new Error("Paystack did not return a payment link.");
+        window.location.assign(payment.authorization_url);
         return;
       }
-      const popup = window.PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
-        email: "tenant@example.com",
-        amount: Math.round(total * 100),
-        currency: "ZAR",
-        ref: invoice.id,
-        label: `${branch} café order`,
-        onClose: () => {
-          toast.info("Paystack payment closed before completion.");
-        },
-        callback: (response) => {
-          saveInvoices(loadInvoices().map((entry) => entry.id === invoice.id ? { ...entry, status: "Paid" } : entry));
-          void supabase.from("cafe_orders").update({ payment_status: "Paid" }).eq("invoice_id", invoice.id).eq("profile_id", userResult.user.id);
-          toast.success(`Paystack payment completed · ${response.reference}`);
-          setCart({});
-        },
-      });
-      popup.openIframe();
-      return;
+      const accountInvoice: Invoice | null = order.invoice_id && order.invoice_reference
+        ? {
+            id: order.invoice_reference,
+            tenant: order.organization_name,
+            amount: Number(order.amount_zar),
+            status: "Sent",
+            due: order.due_date ?? order.created_at.slice(0, 10),
+            method: "Charge to account",
+            items: order.items,
+            issuedAt: order.created_at,
+            orderedBy: order.purchaser_name,
+            branch: order.branch_name,
+            kind: "cafe",
+          }
+        : null;
+      setInvoicePreview(accountInvoice);
+      toast.success(method === "Cash on Delivery"
+        ? `Order ${order.order_id} placed. Pay on delivery.`
+        : `Order placed and invoice ${order.invoice_reference} charged to your organization.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The café order could not be placed.");
+    } finally {
+      setPlacingOrder(false);
     }
-    toast.success(method === "Cash on Delivery" ? "Order placed. Pay cash on delivery." : `Charge to account confirmed · ${invoice.id}`);
-    setCart({});
   };
 
   return (
@@ -1462,8 +1452,7 @@ function Shop({ defaultBranch, canPickBranch, tenant, orderedBy, products, loadi
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Badge variant="secondary" className="gap-1"><ReceiptText className="size-3" />Invoice ready after checkout</Badge>
-            <Badge variant="outline">Paystack sandbox: {PAYSTACK_PUBLIC_KEY}</Badge>
+            <Badge variant="secondary" className="gap-1"><ReceiptText className="size-3" />Invoice for account orders</Badge>
           </div>
         </div>
 
@@ -1472,7 +1461,7 @@ function Shop({ defaultBranch, canPickBranch, tenant, orderedBy, products, loadi
         ) : <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {items.map(p => (
             <div key={p.id} className="card-soft overflow-hidden flex flex-col">
-              <img src={p.image ?? createProductIllustration(p)} alt={p.name} className="h-40 w-full object-cover" />
+              <CafeProductImage product={p} className="h-40 w-full object-cover" />
               <div className="p-4 flex flex-col flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -1517,7 +1506,7 @@ function Shop({ defaultBranch, canPickBranch, tenant, orderedBy, products, loadi
               {cartItems.map(i => (
                 <div key={i.id} className="flex items-start justify-between gap-2 text-sm border-b pb-2 last:border-0">
                   <div className="flex min-w-0 items-center gap-2.5">
-                    <img src={i.image ?? createProductIllustration(i)} alt={i.name} className="size-12 shrink-0 rounded object-cover" />
+                    <CafeProductImage product={i} className="size-12 shrink-0 rounded object-cover" />
                     <div className="min-w-0">
                       <div className="font-medium">{i.name}</div>
                       <div className="text-[11px] text-muted-foreground">{formatZAR(i.price)} × {i.qty}</div>
@@ -1542,17 +1531,19 @@ function Shop({ defaultBranch, canPickBranch, tenant, orderedBy, products, loadi
                   <span className="flex items-center gap-2"><Wallet className="size-3.5" />Cash on Delivery</span>
                   <span className="text-[10px]">Pay on receipt</span>
                 </button>
-                <button type="button" onClick={() => setPaymentMode("paystack")} className={`flex items-center justify-between rounded-md border px-3 py-2 ${paymentMode === "paystack" ? "border-brand bg-brand/10 text-brand" : "hover:bg-muted/50"}`}>
-                  <span className="flex items-center gap-2"><CreditCard className="size-3.5" />Pay now with Paystack</span>
-                  <span className="text-[10px]">Sandbox</span>
+                <button type="button" onClick={() => setPaymentMode("paystack")} disabled={!paystackEnabled} title={paystackEnabled ? undefined : "Enable after deploying and configuring the secure Paystack functions"} className={`flex items-center justify-between rounded-md border px-3 py-2 disabled:cursor-not-allowed disabled:opacity-50 ${paymentMode === "paystack" ? "border-brand bg-brand/10 text-brand" : "hover:bg-muted/50"}`}>
+                  <span className="flex items-center gap-2"><CreditCard className="size-3.5" />Paystack</span>
+                  <span className="text-[10px]">{paystackEnabled ? "Secure checkout" : "Not configured"}</span>
                 </button>
               </div>
             </div>
-            <Button className="w-full mt-3" onClick={() => checkout(paymentMode === "paystack" ? "Paystack" : paymentMode === "cash_on_delivery" ? "Cash on Delivery" : "Charge to account")}>{paymentMode === "paystack" ? "Pay now with Paystack" : paymentMode === "cash_on_delivery" ? "Place order · Cash on Delivery" : "Charge to account"}</Button>
-            {previewInvoice && (
+            <Button className="w-full mt-3" onClick={() => void checkout(paymentMode === "paystack" ? "Paystack" : paymentMode === "cash_on_delivery" ? "Cash on Delivery" : "Charge to account")} disabled={placingOrder || cartItems.length === 0 || !branch}>
+              {placingOrder ? "Placing order…" : paymentMode === "paystack" ? "Pay now with Paystack" : paymentMode === "cash_on_delivery" ? "Place order · Pay on Delivery" : "Charge to account"}
+            </Button>
+            {invoicePreview && (
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <Button variant="outline" onClick={() => setViewingInvoice(previewInvoice)}>View invoice</Button>
-                <Button variant="outline" onClick={() => downloadInvoicePdf(previewInvoice)}>Download PDF</Button>
+                <Button variant="outline" onClick={() => setViewingInvoice(invoicePreview)}>View invoice</Button>
+                <Button variant="outline" onClick={() => downloadInvoicePdf(invoicePreview)}>Download PDF</Button>
               </div>
             )}
           </>
@@ -1590,13 +1581,21 @@ type CafeOrderRow = {
   amount_zar: number | null;
   method: string | null;
   payment_status: string;
+  payment_reference: string | null;
+  payment_authorization_url: string | null;
   due_date: string | null;
   created_at: string;
 };
 
-function MyOrders({ branch, orderedBy, active }: { branch: string; orderedBy: string; active: boolean }) {
+type CafeOrderInvoice = Invoice & {
+  orderId: string;
+  paymentReference: string | null;
+  paymentAuthorizationUrl: string | null;
+};
+
+function MyOrders({ branch, active }: { branch: string; active: boolean }) {
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
-  const [orders, setOrders] = useState<Invoice[]>([]);
+  const [orders, setOrders] = useState<CafeOrderInvoice[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
 
@@ -1608,10 +1607,9 @@ function MyOrders({ branch, orderedBy, active }: { branch: string; orderedBy: st
 
     const loadOrders = async () => {
       const supabase = getSupabaseClient();
-      const localOrders = loadInvoices().filter((invoice) => invoice.kind === "cafe" && invoice.orderedBy === orderedBy);
       if (!supabase) {
         if (current) {
-          setOrders(localOrders);
+          setOrders([]);
           setOrdersError("Order history is unavailable because Supabase is not configured.");
           setOrdersLoading(false);
         }
@@ -1621,7 +1619,7 @@ function MyOrders({ branch, orderedBy, active }: { branch: string; orderedBy: st
       const { data: userResult, error: userError } = await supabase.auth.getUser();
       if (userError || !userResult.user) {
         if (current) {
-          setOrders(localOrders);
+          setOrders([]);
           setOrdersError(userError?.message ?? "Sign in to view your saved orders.");
           setOrdersLoading(false);
         }
@@ -1631,21 +1629,24 @@ function MyOrders({ branch, orderedBy, active }: { branch: string; orderedBy: st
       const [{ data: orderRows, error: orderError }, { data: branchRows }] = await Promise.all([
         supabase
           .from("cafe_orders")
-          .select("id,branch_id,invoice_id,organization_name,purchaser_name,items,amount_zar,method,payment_status,due_date,created_at")
+          .select("id,branch_id,invoice_id,organization_name,purchaser_name,items,amount_zar,method,payment_status,payment_reference,payment_authorization_url,due_date,created_at")
           .eq("profile_id", userResult.user.id)
           .order("created_at", { ascending: false }),
         supabase.from("branches").select("id,name"),
       ]);
       if (!current) return;
       if (orderError) {
-        setOrders(localOrders);
+        setOrders([]);
         setOrdersError(orderError.message);
         setOrdersLoading(false);
         return;
       }
 
       const branchNames = new Map((branchRows ?? []).map(({ id, name }) => [id, name]));
-      const savedOrders = ((orderRows ?? []) as CafeOrderRow[]).map((row): Invoice => ({
+      const savedOrders = ((orderRows ?? []) as CafeOrderRow[]).map((row): CafeOrderInvoice => ({
+        orderId: row.id,
+        paymentReference: row.payment_reference,
+        paymentAuthorizationUrl: row.payment_authorization_url,
         id: row.invoice_id ?? row.id,
         tenant: row.organization_name ?? "Public customer",
         amount: Number(row.amount_zar ?? 0),
@@ -1658,24 +1659,44 @@ function MyOrders({ branch, orderedBy, active }: { branch: string; orderedBy: st
         branch: row.branch_id ? branchNames.get(row.branch_id) ?? branch : branch,
         kind: "cafe",
       }));
-      const savedIds = new Set(savedOrders.map((invoice) => invoice.id));
-      setOrders([
-        ...savedOrders,
-        ...localOrders.filter((invoice) => !savedIds.has(invoice.id)),
-      ].sort((a, b) => b.issuedAt.localeCompare(a.issuedAt)));
+      setOrders(savedOrders.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt)));
       setOrdersLoading(false);
     };
 
     void loadOrders();
     return () => { current = false; };
-  }, [active, branch, orderedBy]);
+  }, [active, branch]);
 
   const rows = orders.filter((invoice) => invoice.kind === "cafe");
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const recentRows = rows.filter((invoice) => new Date(invoice.issuedAt) >= thirtyDaysAgo);
+  const monthRows = rows.filter((invoice) => new Date(invoice.issuedAt) >= monthStart);
+  const resumePayment = async (order: CafeOrderInvoice) => {
+    if (order.paymentAuthorizationUrl) {
+      window.location.assign(order.paymentAuthorizationUrl);
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Payment cannot be resumed because Supabase is not configured.");
+      return;
+    }
+    const { data, error } = await supabase.functions.invoke("initialize-cafe-payment", {
+      body: { order_id: order.orderId },
+    });
+    if (error || typeof data?.authorization_url !== "string") {
+      toast.error(error?.message ?? "Could not resume café payment.");
+      return;
+    }
+    window.location.assign(data.authorization_url);
+  };
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Orders (30 days)" value={String(rows.length)} accent="brand" />
-        <StatCard label="Spent this month" value={formatZAR(rows.reduce((s, r) => s + r.amount, 0))} accent="success" />
+        <StatCard label="Orders (30 days)" value={String(recentRows.length)} accent="brand" />
+        <StatCard label="Spent this month" value={formatZAR(monthRows.reduce((s, r) => s + r.amount, 0))} accent="success" />
         <StatCard label="Charge to account" value={`${rows.filter(r => r.method === "Charge to account").length}`} hint="of total orders" />
         <StatCard label="Home branch" value={branch} />
       </div>
@@ -1718,6 +1739,9 @@ function MyOrders({ branch, orderedBy, active }: { branch: string; orderedBy: st
                 <TableCell><Badge variant="outline" className={STATUS_TONE[invoice.status]}>{invoice.status}</Badge></TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1.5">
+                    {invoice.method === "Paystack" && invoice.status === "Pending verification" && (
+                      <Button size="sm" variant="outline" className="h-7" onClick={() => void resumePayment(invoice)}>Resume payment</Button>
+                    )}
                     <Button size="sm" variant="outline" className="h-7" onClick={() => setViewingInvoice(invoice)}>View</Button>
                     <Button size="sm" variant="outline" className="h-7" onClick={() => downloadInvoicePdf(invoice)}>Download PDF</Button>
                   </div>

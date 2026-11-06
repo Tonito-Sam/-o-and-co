@@ -279,7 +279,7 @@ function PublicUnionStation() {
 
   if (role.id === "group-ceo") return null;
 
-  if (isLoading || isKyalamiBranchManager || isUnauthorizedBranchManager || role.id === "group-ceo") return null;
+  if (isLoading || isKyalamiBranchManager || isUnauthorizedBranchManager) return null;
 
   return (
     <div className="mx-auto max-w-350">

@@ -49,26 +49,53 @@ export type LiveFinanceSnapshot = {
 
 const isOpenInvoice = (status: string) => !["paid", "void"].includes(status.toLowerCase());
 
+async function fetchAllPages<T>(
+  loadPage: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+) {
+  const rows: T[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await loadPage(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 export async function loadLiveFinanceSnapshot(): Promise<LiveFinanceSnapshot> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error("Workspace data is not configured.");
 
-  const [branchResult, tenantResult, invoiceResult] = await Promise.all([
-    supabase.from("branches").select("id,name,status").eq("status", "live").order("name"),
-    supabase.from("tenants").select("id,branch_id,mrr_zar"),
-    supabase
-      .from("invoices")
-      .select("id,reference,tenant_id,amount_zar,status,issued_at,due_at,paid_at,metadata")
-      .order("issued_at", { ascending: false })
-      .limit(500),
+  const [branches, tenants, invoices] = await Promise.all([
+    fetchAllPages<BranchRow>((from, to) =>
+      supabase
+        .from("branches")
+        .select("id,name,status")
+        .eq("status", "live")
+        .order("name")
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPages<TenantRow>((from, to) =>
+      supabase
+        .from("tenants")
+        .select("id,branch_id,mrr_zar")
+        .order("id")
+        .range(from, to),
+    ),
+    fetchAllPages<LiveInvoiceRow>((from, to) =>
+      supabase
+        .from("invoices")
+        .select("id,reference,tenant_id,amount_zar,status,issued_at,due_at,paid_at,metadata")
+        .order("issued_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to),
+    ),
   ]);
-
-  const queryError = branchResult.error ?? tenantResult.error ?? invoiceResult.error;
-  if (queryError) throw new Error(queryError.message);
-
-  const branches = (branchResult.data ?? []) as BranchRow[];
-  const tenants = (tenantResult.data ?? []) as TenantRow[];
-  const invoices = (invoiceResult.data ?? []) as LiveInvoiceRow[];
   const branchByTenant = new Map(tenants.map((tenant) => [tenant.id, tenant.branch_id]));
   const branchTotals = new Map<string, LiveFinanceBranch>(
     branches.map((branch) => [

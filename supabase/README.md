@@ -30,4 +30,23 @@ Branch assignments are stored in `public.user_roles.branch_id`. The branch acces
 
 The financial overview reports actual recurring rent, invoice collections and receivables, qualified pipeline, and pending bookings. The current schema does not contain an expense ledger, so profit, cost leakage, and operating margin are intentionally not reported until expense data is connected.
 
+## Café checkout and payment confirmation
+
+Café orders are created by `public.create_cafe_order`, which validates the authenticated member, branch, current product prices, availability, and stock inside one database transaction. Charge-to-account orders create an organization invoice in the same transaction. Paystack orders remain `awaiting_payment` and are not sent to the kitchen until a verified payment is received.
+
+Apply `202611060001_cafe_atomic_checkout.sql` and `202611060002_rosebank_chicken_prego.sql` after the base schema and existing café migrations. The latter adds the omitted Rosebank Chicken Prego entry from the supplied menu. Configure `PAYSTACK_SECRET_KEY` and `SITE_URL` as Supabase function secrets, then deploy:
+
+```sh
+supabase secrets set PAYSTACK_SECRET_KEY=<paystack-secret-key> SITE_URL=https://<production-host>
+supabase functions deploy initialize-cafe-payment
+supabase functions deploy verify-cafe-payment
+supabase functions deploy cafe-payment-webhook --no-verify-jwt
+```
+
+Configure the Paystack dashboard webhook URL as `https://<project-ref>.supabase.co/functions/v1/cafe-payment-webhook`. Keep the Paystack secret only in Supabase; the browser redirects to Paystack and never sets an order to paid. Until the migration and functions are deployed with valid credentials, Paystack checkout will fail closed and orders will not appear in the kitchen queue.
+
+Keep `VITE_CAFE_PAYSTACK_ENABLED` unset or `false` until the migration, all three functions, secrets, and webhook have been verified in the target environment. Set it to `true` only in that environment's frontend build configuration to expose the payment option.
+
+Run `npm run check:production` before merging. It performs TypeScript checking, lint, CRM/analytics/café live-data regression checks, and a production build; GitHub Actions runs the same command for pushes and pull requests.
+
 Do not run `supabase db push` before the base schema is installed: the prospect migration references `public.companies` and `public.branches`.
