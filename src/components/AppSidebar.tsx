@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   LayoutDashboard,
@@ -37,7 +38,10 @@ import {
 import { BrandLogo } from "@/components/BrandLogo";
 import { useRole } from "@/lib/role-context";
 
-const nav = [
+type NavItem = { title: string; url: string; icon: LucideIcon };
+type NavGroup = { label: string; items: NavItem[] };
+
+const nav: NavGroup[] = [
   {
     label: "Executive",
     items: [
@@ -177,13 +181,37 @@ const cafeManagerNav = nav.map((group) =>
     : group,
 );
 
+const superadminNav: NavGroup[] = [
+  {
+    label: "Executive",
+    items: [{ title: "Overview", url: "/", icon: LayoutDashboard }],
+  },
+  {
+    label: "User Management",
+    items: [
+      { title: "Staff", url: "/", icon: Users },
+      { title: "Tenants", url: "/tenants", icon: Building2 },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      { title: "Messages", url: "/messaging", icon: MessageSquare },
+      { title: "Support", url: "/support", icon: LifeBuoy },
+      { title: "Role Settings", url: "/settings/roles", icon: Settings },
+    ],
+  },
+];
+
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { role, canAccessUrl } = useRole();
-  const isActive = (url: string) => (url === "/" ? pathname === "/" : pathname.startsWith(url));
+  const isActive = (item: NavItem) => item.url === "/" ? pathname === "/" : pathname.startsWith(item.url);
   const revenueGroupLabel = role.id === "tenant-admin" ? "Invoice" : "Revenue";
   const sidebarGroups =
-    role.id === "group-ceo"
+    role.id === "superadmin"
+      ? superadminNav
+      : role.id === "group-ceo"
       ? groupCeoNav
       : role.id === "sales-manager"
         ? salesManagerNav
@@ -219,8 +247,8 @@ export function AppSidebar() {
               <SidebarGroupContent>
                 <SidebarMenu>
                   {items.map((item) => (
-                    <SidebarMenuItem key={item.url}>
-                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                    <SidebarMenuItem key={`${item.url}-${item.title}`}>
+                      <SidebarMenuButton asChild isActive={isActive(item)} tooltip={item.title}>
                         <Link to={item.url}>
                           <item.icon className="size-4" />
                           <span>{item.title}</span>

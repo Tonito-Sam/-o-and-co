@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { COMMUNITY_MODULES, ROLES } from "@/lib/mock";
 import { useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -53,29 +54,43 @@ function RoleSettings() {
         eyebrow="Platform · Administration"
         title={canManageCommunity ? "Staff and role settings" : "Branch team roles"}
         description={canManageCommunity
-          ? "Assign Office & Co roles and configure community-module visibility."
+          ? "Assign platform access to staff and control community-module visibility by role."
           : `${role.branch ?? "Your assigned branches"} · Assign café and community managers.`}
       />
 
-      {canManageAssignments && <StaffRoleAssignments isPlatformAdmin={isPlatformAdmin} />}
-
-      {canManageCommunity && !showCommunity && (
-        <div className="mb-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs flex items-start gap-2">
-          <ShieldAlert className="size-4 text-warning shrink-0 mt-px" />
-          <div>
-            <div className="font-medium text-warning">
-              Master community switch is OFF for the Group CEO.
-            </div>
-            <div className="text-foreground/80">
-              Community modules are currently hidden for your view regardless of per-role settings.
-              Re-enable in the top bar.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {canManageCommunity && <div className="card-soft overflow-hidden">
-        <table className="w-full">
+      {canManageCommunity ? (
+        <Tabs defaultValue="staff" className="mt-6 space-y-4">
+          <TabsList aria-label="Role settings views">
+            <TabsTrigger value="staff">Staff assignments</TabsTrigger>
+            <TabsTrigger value="community">Community access</TabsTrigger>
+          </TabsList>
+          <TabsContent value="staff" className="mt-0">
+            <StaffRoleAssignments isPlatformAdmin={isPlatformAdmin} />
+          </TabsContent>
+          <TabsContent value="community" className="mt-0">
+            {canManageCommunity && !showCommunity && (
+              <div className="mb-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs flex items-start gap-2">
+                <ShieldAlert className="size-4 text-warning shrink-0 mt-px" />
+                <div>
+                  <div className="font-medium text-warning">
+                    Master community switch is OFF for the Group CEO.
+                  </div>
+                  <div className="text-foreground/80">
+                    Community modules are currently hidden for your view regardless of per-role settings.
+                    Re-enable in the top bar.
+                  </div>
+                </div>
+              </div>
+            )}
+            <section>
+              <div className="mb-3">
+                <h2 className="font-display text-lg font-semibold">Community module access</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  These switches apply to every account with the selected role; they are not individual staff assignments.
+                </p>
+              </div>
+              <div className="card-soft overflow-hidden">
+                <table className="w-full">
           <thead className="bg-muted/30 border-b">
             <tr>
               <th className="text-left px-4 py-3 text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
@@ -122,14 +137,18 @@ function RoleSettings() {
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>}
-
-      {canManageCommunity && <div className="mt-4 text-[11px] text-muted-foreground">
-        Note: These settings layer on top of the role's base navigation. The Group CEO's{" "}
-        <strong>Community</strong> master switch in the top bar still overrides everything for the
-        CEO view.
-      </div>}
+                </table>
+              </div>
+            </section>
+            <p className="mt-4 text-[11px] text-muted-foreground">
+              These settings layer on top of each role's base navigation. The Group CEO's{" "}
+              <strong>Community</strong> master switch in the top bar still overrides these settings.
+            </p>
+          </TabsContent>
+        </Tabs>
+      ) : canManageAssignments ? (
+        <StaffRoleAssignments isPlatformAdmin={isPlatformAdmin} />
+      ) : null}
     </div>
   );
 }
@@ -138,8 +157,10 @@ type StaffProfile = { id: string; full_name: string | null; email: string | null
 type StaffBranch = { id: string; name: string };
 type StaffAssignment = { id: string; user_id: string; role: string; branch_id: string | null };
 
-const isOfficeCoEmail = (email: string | null) =>
-  email?.trim().toLowerCase().endsWith("@officeandco.co.za") ?? false;
+const isOfficeCoEmail = (email: string | null) => {
+  const normalizedEmail = email?.trim().toLowerCase();
+  return ["@officeandco.co.za", "@officeandco.co.ca"].some((domain) => normalizedEmail?.endsWith(domain));
+};
 
 const assignableRoles = [
   { value: "branch_manager", label: "Branch manager", scope: "branch" },
@@ -230,7 +251,8 @@ function StaffRoleAssignments({ isPlatformAdmin }: { isPlatformAdmin: boolean })
 
   const selectedRoleDefinition = managerRoles.find((item) => item.value === selectedRole);
   const visibleAssignments = assignments.filter((assignment) =>
-    isPlatformAdmin || (assignment.branch_id && visibleBranches.some((branch) => branch.id === assignment.branch_id)),
+    assignableRoles.some((item) => item.value === assignment.role)
+    && (isPlatformAdmin || (assignment.branch_id && visibleBranches.some((branch) => branch.id === assignment.branch_id))),
   );
 
   return (
@@ -238,7 +260,7 @@ function StaffRoleAssignments({ isPlatformAdmin }: { isPlatformAdmin: boolean })
       <div className="border-b p-4">
         <h2 className="font-display text-base font-semibold">Office &amp; Co staff assignments</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Assign roles to @officeandco.co.za accounts. Group roles cover all branches; branch roles apply only at the selected location.
+          Assign roles to Office &amp; Co accounts. Group roles cover all branches; branch roles apply only at the selected location.
         </p>
       </div>
       <div className="grid gap-3 p-4 sm:grid-cols-[minmax(12rem,1.3fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_auto] sm:items-end">

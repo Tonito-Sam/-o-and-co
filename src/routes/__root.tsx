@@ -144,7 +144,6 @@ function isPublicRoute(pathname: string) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const onboardingRoute = pathname === "/onboarding";
   const publicShell = isPublicRoute(pathname) || onboardingRoute;
@@ -157,88 +156,121 @@ function RootComponent() {
     return () => tabletQuery.removeEventListener("change", syncTabletSidebar);
   }, []);
 
+  return (
+    <QueryClientProvider client={queryClient}>
+      <RoleProvider>
+        <RouteAccessGuard pathname={pathname}>
+          {publicShell ? (
+            <div className="min-h-screen w-full bg-background">
+              <Outlet />
+              <Toaster />
+            </div>
+          ) : (
+            <AuthenticatedWorkspace sidebarOpen={sidebarOpen} onSidebarOpenChange={setSidebarOpen} />
+          )}
+        </RouteAccessGuard>
+      </RoleProvider>
+    </QueryClientProvider>
+  );
+}
+
+function RouteAccessGuard({ pathname, children }: { pathname: string; children: ReactNode }) {
+  const navigate = useNavigate();
+  const onboardingRoute = pathname === "/onboarding";
+  const [checkingAccess, setCheckingAccess] = useState(!isPublicRoute(pathname));
+  const [accessError, setAccessError] = useState("");
+
   useEffect(() => {
-    if (isPublicRoute(pathname)) return;
+    if (isPublicRoute(pathname)) {
+      setCheckingAccess(false);
+      setAccessError("");
+      return;
+    }
     const supabase = getSupabaseClient();
     if (!supabase) {
       navigate({ to: "/auth/sign-in", replace: true });
       return;
     }
+
     let active = true;
-    const officeRoles = new Set([
-      "superadmin",
-      "group_admin",
-      "group_ceo",
-      "sales_manager",
-      "rosebank_sales",
-      "branch_manager",
-      "cafe_manager",
-      "community_manager",
-      "finance",
-    ]);
-    const resolveDestination = async (userId: string) => {
-      const [membershipResult, rolesResult] = await Promise.all([
+    setCheckingAccess(true);
+    setAccessError("");
+    const resolveAccess = async () => {
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (!active) return;
+      if (sessionError || !data.session) {
+        navigate({ to: "/auth/sign-in", replace: true });
+        return;
+      }
+
+      const [roleResult, membershipResult] = await Promise.all([
+        supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", data.session.user.id),
         supabase
           .from("organization_members")
           .select("status")
-          .eq("user_id", userId)
+          .eq("user_id", data.session.user.id)
           .eq("status", "active")
           .maybeSingle(),
-        supabase.from("user_roles").select("role").eq("user_id", userId),
       ]);
       if (!active) return;
-      if (membershipResult.error)
-        console.error("Organization membership lookup failed:", membershipResult.error.message);
-      if (rolesResult.error)
-        console.error("Platform role lookup failed:", rolesResult.error.message);
-      const isOfficeStaff = (rolesResult.data ?? []).some(({ role }) => officeRoles.has(role));
+      const lookupError = roleResult.error ?? membershipResult.error;
+      if (lookupError) {
+        setAccessError("Workspace access could not be verified. Reload the page to try again.");
+        setCheckingAccess(false);
+        return;
+      }
+
+      const officeRoles = new Set([
+        "superadmin",
+        "group_admin",
+        "group_ceo",
+        "crm_manager",
+        "sales-manager",
+        "rosebank-sales",
+        "branch-manager",
+        "cafe-manager",
+        "community-manager",
+        "finance",
+      ]);
+      const isOfficeStaff = (roleResult.data ?? []).some(({ role }) => officeRoles.has(role));
       const hasOrganization = Boolean(membershipResult.data);
       if (onboardingRoute && (hasOrganization || isOfficeStaff)) {
         navigate({ to: "/", replace: true });
       } else if (!onboardingRoute && !hasOrganization && !isOfficeStaff) {
         navigate({ to: "/onboarding", replace: true });
       }
+      setCheckingAccess(false);
     };
-    const resolveSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
+    void resolveAccess().catch((error: unknown) => {
       if (!active) return;
-      if (error || !data.session) {
-        navigate({ to: "/auth/sign-in", replace: true });
-        return;
-      }
-      await resolveDestination(data.session.user.id);
-    };
-    void resolveSession();
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        navigate({ to: "/auth/sign-in", replace: true });
-        return;
-      }
-      window.setTimeout(() => void resolveDestination(session.user.id), 0);
+      console.error("Workspace access lookup failed:", error);
+      setAccessError("Workspace access could not be verified. Reload the page to try again.");
+      setCheckingAccess(false);
     });
 
     return () => {
       active = false;
-      subscription.unsubscribe();
     };
-  }, [onboardingRoute, pathname, navigate]);
+  }, [navigate, onboardingRoute, pathname]);
 
-  return (
-    <QueryClientProvider client={queryClient}>
-      <RoleProvider>
-        {publicShell ? (
-          <div className="min-h-screen w-full bg-background">
-            <Outlet />
-            <Toaster />
-          </div>
-        ) : (
-          <AuthenticatedWorkspace sidebarOpen={sidebarOpen} onSidebarOpenChange={setSidebarOpen} />
-        )}
-      </RoleProvider>
-    </QueryClientProvider>
-  );
+  if (!isPublicRoute(pathname) && checkingAccess) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background text-muted-foreground" role="status" aria-live="polite">
+        <div className="flex items-center gap-2 text-sm">
+          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          Loading your workspace
+        </div>
+      </div>
+    );
+  }
+  if (accessError) {
+    return <div className="grid min-h-screen place-items-center px-4 text-center text-sm text-destructive" role="alert">{accessError}</div>;
+  }
+
+  return children;
 }
 
 function AuthenticatedWorkspace({

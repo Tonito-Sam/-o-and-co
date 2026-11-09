@@ -59,6 +59,7 @@ import {
 import { ProductionFinanceAPI } from "@/components/finance/ProductionFinanceAPI";
 import { RoleOperationsDashboard } from "@/components/RoleOperationsDashboard";
 import { FinancialOverviewDashboard } from "@/components/FinancialOverviewDashboard";
+import { SuperadminDashboard } from "@/components/SuperadminDashboard";
 import { getSupabaseClient } from "@/lib/supabase";
 import { GroupExecutiveDashboard } from "@/components/GroupExecutiveDashboard";
 
@@ -149,7 +150,16 @@ function Dashboard() {
   if (role.id === "group-ceo") {
     return <GroupExecutiveDashboard role={role} />;
   }
-  if (["superadmin", "group-admin", "finance"].includes(role.id)) {
+  if (role.id === "superadmin") {
+    return (
+      <SuperadminDashboard
+        role={role}
+        greetingState={greetingState}
+        firstName={firstName}
+      />
+    );
+  }
+  if (["group-admin", "finance"].includes(role.id)) {
     return <FinancialOverviewDashboard role={role} />;
   }
   if (["crm-manager", "sales-manager"].includes(role.id)) {

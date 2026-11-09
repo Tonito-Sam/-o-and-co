@@ -28,6 +28,16 @@ Existing lease rosters can be imported from the Tenants page as CSV. Export a ro
 
 Branch assignments are stored in `public.user_roles.branch_id`. The branch access migration seeds the known group admin/CRM manager and branch manager accounts from their Auth profile emails; verify those accounts exist before applying it. Branch managers can assign café/community roles in their own branches, while only group administration can assign global roles.
 
+## Office & Co staff account deletion
+
+The superadmin Staffs directory can permanently delete non-superadmin accounts using the `delete-office-staff` Edge Function. It verifies the caller's superadmin role, restricts targets to Office & Co email domains, and prevents self-deletion or deletion of another superadmin. Deploy it with:
+
+```sh
+supabase functions deploy delete-office-staff --project-ref <project-ref>
+```
+
+The function uses the standard Supabase Edge Function `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` secrets. Deleting the Auth user cascades to its profile, platform roles, and organization membership.
+
 The financial overview reports actual recurring rent, invoice collections and receivables, qualified pipeline, and pending bookings. The current schema does not contain an expense ledger, so profit, cost leakage, and operating margin are intentionally not reported until expense data is connected.
 
 ## Café checkout and payment confirmation
