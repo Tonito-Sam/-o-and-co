@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
@@ -19,9 +19,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BrandLogo } from "@/components/BrandLogo";
 import { getSupabaseClient } from "@/lib/supabase";
+import { toast } from "sonner";
 
 export function TopBar() {
   const { role, showCommunity, setShowCommunity, canAccessUrl } = useRole();
+  const navigate = useNavigate();
   const isCEO = role.id === "group-ceo";
   const canManagePlatformRoles = ["group-admin", "group-ceo", "superadmin"].includes(role.id);
   const [notifications, setNotifications] = useState<Array<{
@@ -71,6 +73,25 @@ export function TopBar() {
                 { label: "New content", href: "/content" },
                 { label: "New tenant", href: "/tenants" },
               ];
+
+  const signOut = async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Authentication is not configured.");
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) {
+        toast.error(`Could not sign out: ${error.message}`);
+        return;
+      }
+      navigate({ to: "/auth/sign-in", replace: true });
+    } catch (cause) {
+      toast.error(cause instanceof Error ? `Could not sign out: ${cause.message}` : "Could not sign out.");
+    }
+  };
+
   const quickActions = actionOptions.filter((action) => canAccessUrl(action.href));
 
   useEffect(() => {
@@ -270,7 +291,7 @@ export function TopBar() {
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => void getSupabaseClient()?.auth.signOut()}>
+              <DropdownMenuItem onSelect={() => void signOut()}>
                 Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>

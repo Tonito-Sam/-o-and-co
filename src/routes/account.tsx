@@ -71,6 +71,9 @@ function Account() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
   const [loadError, setLoadError] = useState("");
 
   const loadAccount = useCallback(async () => {
@@ -242,6 +245,35 @@ function Account() {
     toast.success("Profile updated.");
   };
 
+  const changePassword = async () => {
+    if (newPassword.length < 8) {
+      toast.error("Use at least 8 characters for your new password.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords don't match.");
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Authentication is not configured.");
+      return;
+    }
+
+    setUpdatingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setUpdatingPassword(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    setNewPassword("");
+    setConfirmPassword("");
+    toast.success("Password updated.");
+  };
+
   const createInviteCode = async (rotate = false) => {
     const supabase = getSupabaseClient();
     if (!supabase) return;
@@ -287,6 +319,7 @@ function Account() {
 
   const isOrganizationMember = membershipRole !== null;
   const isOrganizationAdmin = membershipRole === "admin";
+  const isOfficeCoOrganization = organizationName.trim().toLowerCase() === "office & co";
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -438,13 +471,16 @@ function Account() {
               <div className="max-w-xl border-t pt-5">
                 <div className="mb-2 flex items-center gap-2">
                   <KeyRound className="size-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold">Member invite code</h3>
+                  <h3 className="text-sm font-semibold">
+                    {isOfficeCoOrganization ? "Office & Co membership" : "Organization invite code"}
+                  </h3>
                 </div>
                 <p className="mb-4 text-sm text-muted-foreground">
-                  Share this reusable code with people joining your organization. It expires after
-                  one year; an organization admin can rotate it at any time.
+                  {isOfficeCoOrganization
+                    ? "Accounts using an @officeandco.co.za email address are assigned automatically. No invite code is needed."
+                    : "All organization members can view and share this reusable code. It expires after one year; an organization admin can rotate it at any time."}
                 </p>
-                {inviteCode ? (
+                {isOfficeCoOrganization ? null : inviteCode ? (
                   <>
                     <div className="flex gap-2">
                       <Input
@@ -521,6 +557,47 @@ function Account() {
               </p>
             </section>
           )}
+
+          <section className="border-b p-5 md:p-7">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+              <KeyRound className="size-4 text-muted-foreground" />
+              Change password
+            </h2>
+            <div className="grid max-w-xl gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="account-new-password">New password</Label>
+                <Input
+                  id="account-new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="account-confirm-password">Confirm new password</Label>
+                <Input
+                  id="account-confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">Use at least 8 characters.</p>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4"
+              onClick={() => void changePassword()}
+              disabled={updatingPassword || loading || !newPassword || !confirmPassword}
+            >
+              {updatingPassword ? "Updating password…" : "Update password"}
+            </Button>
+          </section>
 
           <div className="flex flex-col gap-3 bg-muted/20 p-5 sm:flex-row sm:items-center sm:justify-between md:px-7">
             <p className="text-xs text-muted-foreground">
