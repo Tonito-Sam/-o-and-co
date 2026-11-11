@@ -24,6 +24,7 @@ import {
   ArrowRight, Check, Sparkles, MapPin, Calendar, Users, Coffee, ShieldCheck,
   Landmark, ChevronRight, ChevronLeft, LogIn, Phone, Mail, CheckCircle2,
   Clock, Play, Wifi, Presentation, Building2, Star, SquareStack,
+  Menu as MenuIcon, X,
 } from "lucide-react";
 import { branches } from "@/lib/mock";
 import { toast } from "sonner";
@@ -68,6 +69,8 @@ type OneOffBookingResult = {
   email_token: string;
 };
 
+type BookingTab = "tour" | "space";
+
 const kyalamiOfficeImg = "/kyalami/private-office-a.jpg";
 const heroSlides = [
   {
@@ -92,6 +95,9 @@ function Welcome() {
   const { unionBooking } = Route.useSearch();
   const [activeTour, setActiveTour] = useState<Tour | null>(null);
   const [unionBookingOpen, setUnionBookingOpen] = useState(false);
+  const [bookingRequest, setBookingRequest] = useState<{ branch: string; tab: BookingTab } | null>(null);
+  const openBookingRequest = (branch: string, tab: BookingTab = "tour") =>
+    setBookingRequest({ branch, tab });
 
   useEffect(() => {
     if (unionBooking === "open") setUnionBookingOpen(true);
@@ -102,7 +108,7 @@ function Welcome() {
       <SiteNav />
       <Hero onOpenTour={(id) => setActiveTour(tours[id])} />
       <ChooseYourNeed onOpenTour={(id) => setActiveTour(tours[id])} />
-      <Locations onOpenTour={(id) => setActiveTour(tours[id])} />
+      <Locations onOpenTour={(id) => setActiveTour(tours[id])} onOpenBooking={openBookingRequest} />
       <Experience />
       <UnionStationFeature
         onOpenTour={() => setActiveTour(tours["union-station"])}
@@ -110,8 +116,16 @@ function Welcome() {
       />
       <Proof />
       <FAQ />
-      <BookingSection />
-      <FinalCTA />
+      <BookingSection
+        open={bookingRequest !== null}
+        onOpenChange={(open) => {
+          if (!open) setBookingRequest(null);
+        }}
+        onOpenBooking={openBookingRequest}
+        initialBranch={bookingRequest?.branch ?? "Kyalami"}
+        initialTab={bookingRequest?.tab ?? "tour"}
+      />
+      <FinalCTA onOpenBooking={() => openBookingRequest("Kyalami", "tour")} />
       <Footer />
 
       <VirtualTour
@@ -175,12 +189,20 @@ function SiteNav() {
             Book a tour <ArrowRight className="size-3.5" />
           </Button>
         </div>
-        <Button variant="ghost" size="sm" className="sm:hidden" onClick={() => setOpen((v) => !v)}>
-          Menu
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-10 sm:hidden"
+          aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={open}
+          aria-controls="mobile-site-navigation"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? <X className="size-5" /> : <MenuIcon className="size-5" />}
         </Button>
       </div>
       {open && (
-        <div className="sm:hidden border-t bg-background px-4 py-4 space-y-2">
+        <nav id="mobile-site-navigation" className="sm:hidden border-t bg-background px-4 py-4 space-y-2">
           <a href="#choose" onClick={() => setOpen(false)} className="block text-sm py-1">Spaces</a>
           <a href="#locations" onClick={() => setOpen(false)} className="block text-sm py-1">Locations</a>
           <a href="#union-station" onClick={() => setOpen(false)} className="block text-sm py-1">Events</a>
@@ -194,7 +216,7 @@ function SiteNav() {
               Book a tour
             </Button>
           </div>
-        </div>
+        </nav>
       )}
     </header>
   );
@@ -218,7 +240,7 @@ function Hero({ onOpenTour }: { onOpenTour: (id: Tour["id"]) => void }) {
 
   return (
     <section className="relative overflow-hidden">
-      <div className="relative h-[88vh] min-h-[560px] max-h-[860px] w-full">
+      <div className="relative h-[min(78svh,680px)] min-h-[520px] max-h-[860px] w-full md:h-[88vh] md:min-h-[560px]">
         {heroSlides.map((item, index) => (
           <div
             key={item.name}
@@ -240,17 +262,17 @@ function Hero({ onOpenTour }: { onOpenTour: (id: Tour["id"]) => void }) {
         <div className="relative mx-auto max-w-7xl h-full px-4 sm:px-6 flex flex-col justify-end pb-16 md:pb-24 text-white">
           <Badge
             variant="outline"
-            className="self-start bg-white/10 border-white/25 text-white gap-1.5 mb-5 backdrop-blur"
+            className="self-start max-w-full whitespace-normal leading-snug bg-white/10 border-white/25 text-white gap-1.5 mb-4 sm:mb-5 backdrop-blur"
           >
             <Sparkles className="size-3" /> Private offices &amp; meeting rooms · Johannesburg
           </Badge>
-          <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight max-w-3xl leading-[1.02]">
+          <h1 className="font-display text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight max-w-3xl leading-[1.02]">
             A considered place for your team to work.
           </h1>
-          <p className="mt-5 text-sm sm:text-base md:text-lg text-white/85 max-w-xl leading-relaxed">
+          <p className="mt-4 sm:mt-5 text-sm sm:text-base md:text-lg text-white/85 max-w-xl leading-relaxed">
             {slide.copy} For company gatherings, explore the distinctive Union Station venue.
           </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
+          <div className="mt-5 sm:mt-7 flex flex-wrap items-center gap-3">
             <Button size="lg" className="gap-1.5" onClick={() => nav({ to: "/tour-request" })}>
               Book a tour <ArrowRight className="size-4" />
             </Button>
@@ -375,8 +397,10 @@ function ChooseYourNeed({ onOpenTour }: { onOpenTour: (id: Tour["id"]) => void }
 /* ------------------------------------------------------------------ */
 /* LOCATIONS — real per-branch content, driven by tours registry       */
 /* ------------------------------------------------------------------ */
-function Locations({ onOpenTour }: { onOpenTour: (id: Tour["id"]) => void }) {
-  const nav = useNavigate();
+function Locations({ onOpenTour, onOpenBooking }: {
+  onOpenTour: (id: Tour["id"]) => void;
+  onOpenBooking: (branch: string, tab: BookingTab) => void;
+}) {
   const live = branches.filter(
     (b) => b.status === "live" && (b.name === "Kyalami" || b.name === "Rosebank"),
   );
@@ -429,11 +453,11 @@ function Locations({ onOpenTour }: { onOpenTour: (id: Tour["id"]) => void }) {
                     <Button size="sm" variant="outline" onClick={() => onOpenTour(tour.id)}>
                       <Play className="mr-1.5 size-3.5" /> Virtual tour
                     </Button>
-                    <Button size="sm" onClick={() => nav({ to: "/tour-request" })}>
+                    <Button size="sm" onClick={() => onOpenBooking(b.name, "tour")}>
                       Book a visit <ArrowRight className="size-3.5 ml-1" />
                     </Button>
-                    <Button size="sm" variant="outline" asChild>
-                      <a href="#book">Request a space</a>
+                    <Button size="sm" variant="outline" onClick={() => onOpenBooking(b.name, "space")}>
+                      Request a space
                     </Button>
                   </div>
                 </div>
@@ -656,14 +680,20 @@ function FAQ() {
 /* ------------------------------------------------------------------ */
 /* BOOKING — split into "Book a tour" vs "Request a space"            */
 /* ------------------------------------------------------------------ */
-function BookingSection() {
+function BookingSection({ open, onOpenChange, onOpenBooking, initialBranch, initialTab }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onOpenBooking: (branch: string, tab: BookingTab) => void;
+  initialBranch: string;
+  initialTab: BookingTab;
+}) {
   const live = branches.filter((b) => b.status === "live");
 
   /* ---- Tour request form ---- */
   const [tourName, setTourName] = useState("");
   const [tourEmail, setTourEmail] = useState("");
   const [tourPhone, setTourPhone] = useState("");
-  const [tourBranch, setTourBranch] = useState("Kyalami");
+  const [tourBranch, setTourBranch] = useState(initialBranch);
   const [tourDate, setTourDate] = useState(tomorrowDate);
   const [tourTime, setTourTime] = useState("10:00");
   const [tourNotes, setTourNotes] = useState("");
@@ -673,7 +703,7 @@ function BookingSection() {
   const [spaceEmail, setSpaceEmail] = useState("");
   const [spacePhone, setSpacePhone] = useState("");
   const [spaceCompany, setSpaceCompany] = useState("");
-  const [spaceBranch, setSpaceBranch] = useState("Kyalami");
+  const [spaceBranch, setSpaceBranch] = useState(initialBranch);
   const [spacePurpose, setSpacePurpose] = useState("Meeting room booking");
   const [spaceGuests, setSpaceGuests] = useState("8");
   const [spaceDate, setSpaceDate] = useState(tomorrowDate);
@@ -686,6 +716,14 @@ function BookingSection() {
   const [requestReference, setRequestReference] = useState("");
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const [confirmationEmailStatus, setConfirmationEmailStatus] = useState("Sending confirmation…");
+  const [activeTab, setActiveTab] = useState<BookingTab>(initialTab);
+
+  useEffect(() => {
+    if (!open) return;
+    setTourBranch(initialBranch);
+    setSpaceBranch(initialBranch);
+    setActiveTab(initialTab);
+  }, [open, initialBranch, initialTab]);
 
   const submitRequest = async (details: {
     name: string;
@@ -820,25 +858,34 @@ function BookingSection() {
   };
 
   return (
-    <section id="book" className="py-16 md:py-24 border-b bg-slate-50/50 relative overflow-hidden">
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-brand/5 rounded-full blur-3xl -z-10" />
-
-      <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <Badge variant="outline" className="mb-4 text-brand border-brand/20 bg-brand/5">
-            Choose your path
-          </Badge>
-          <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">
-            Book a tour — or request a specific space.
-          </h2>
-          <p className="mt-3 text-muted-foreground">
-            Two different journeys, kept separate on purpose. Tours are quick walkthroughs. Space requests need date, time and capacity.
-          </p>
+    <>
+      <section id="book" className="border-b py-10 md:py-14">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 px-4 sm:px-6">
+          <div>
+            <h2 className="font-display text-2xl font-semibold">Book a visit or request a space</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Choose a branch and send your request to its team.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => onOpenBooking(initialBranch, "tour")}>Book a visit</Button>
+            <Button variant="outline" onClick={() => onOpenBooking(initialBranch, "space")}>Request a space</Button>
+          </div>
         </div>
-
-        <div className="bg-white rounded-3xl shadow-xl border border-border/50 overflow-hidden">
-          <Tabs defaultValue="tour" className="w-full">
-            <div className="border-b bg-muted/30 px-4 sm:px-6 pt-4">
+      </section>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex max-h-[92vh] w-[calc(100%-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:w-[calc(100%-2rem)]">
+          <DialogHeader className="border-b px-5 py-4 pr-12 text-left sm:px-7">
+            <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-brand">Office &amp; Co · {activeTab === "tour" ? "Visit" : "Space request"}</div>
+            <DialogTitle className="mt-1 font-display text-xl sm:text-2xl">
+              {activeTab === "tour" ? "Book a visit at" : "Request a space at"} {activeTab === "tour" ? tourBranch : spaceBranch}
+            </DialogTitle>
+            <DialogDescription>
+              {activeTab === "tour"
+                ? "Choose a preferred time for a guided visit. The branch team will confirm your request."
+                : "Share your requirements and the branch team will confirm availability and pricing."}
+            </DialogDescription>
+          </DialogHeader>
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as BookingTab)} className="flex min-h-0 flex-1 flex-col">
+            <div className="border-b px-4 py-3 sm:px-7">
               <TabsList className="grid grid-cols-2 w-full max-w-md">
                 <TabsTrigger value="tour" className="gap-1.5">
                   <Play className="size-3.5" /> Book a tour
@@ -850,7 +897,7 @@ function BookingSection() {
             </div>
 
             {/* ---- TOUR TAB ---- */}
-            <TabsContent value="tour" className="p-6 sm:p-8 m-0">
+            <TabsContent value="tour" className="mt-0 min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-xs font-medium">Full name <span className="text-red-500">*</span></label>
@@ -891,7 +938,7 @@ function BookingSection() {
             </TabsContent>
 
             {/* ---- SPACE TAB ---- */}
-            <TabsContent value="space" className="p-6 sm:p-8 m-0">
+            <TabsContent value="space" className="mt-0 min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-xs font-medium">Full name <span className="text-red-500">*</span></label>
@@ -947,8 +994,8 @@ function BookingSection() {
               </div>
             </TabsContent>
           </Tabs>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation */}
       <Dialog open={confirmationOpen} onOpenChange={setConfirmationOpen}>
@@ -984,15 +1031,14 @@ function BookingSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </>
   );
 }
 
 /* ------------------------------------------------------------------ */
 /* FINAL CTA                                                          */
 /* ------------------------------------------------------------------ */
-function FinalCTA() {
-  const nav = useNavigate();
+function FinalCTA({ onOpenBooking }: { onOpenBooking: () => void }) {
   return (
     <section className="py-16 md:py-24">
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
@@ -1005,16 +1051,16 @@ function FinalCTA() {
             Take the virtual tour, then book a visit at Kyalami or Rosebank.
           </p>
           <div className="relative mt-7 flex flex-wrap justify-center gap-3">
-            <Button size="lg" variant="secondary" onClick={() => nav({ to: "/tour-request" })}>
+            <Button size="lg" variant="secondary" onClick={onOpenBooking}>
               Book a tour
             </Button>
             <Button
-              asChild
               size="lg"
               variant="outline"
               className="bg-transparent text-white border-white/30 hover:bg-white/10 hover:text-white"
+              onClick={onOpenBooking}
             >
-              <a href="#book">Request a space</a>
+              Request a space
             </Button>
           </div>
         </div>

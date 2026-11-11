@@ -189,8 +189,8 @@ const superadminNav: NavGroup[] = [
   {
     label: "User Management",
     items: [
-      { title: "Staff", url: "/", icon: Users },
-      { title: "Tenants", url: "/tenants", icon: Building2 },
+      { title: "Staff", url: "/staff", icon: Users },
+      { title: "Tenants", url: "/tenant-access", icon: Building2 },
     ],
   },
   {

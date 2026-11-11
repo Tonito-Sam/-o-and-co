@@ -38,12 +38,21 @@ function Account() {
   const { role, updateFullName } = useRole();
   const isPlatformStaff = [
     "superadmin",
+    "group-admin",
     "group-ceo",
     "sales-manager",
     "rosebank-sales",
     "branch-manager",
     "cafe-manager",
     "community-manager",
+    "finance",
+  ].includes(role.id);
+  const canSelectGlobalWide = [
+    "superadmin",
+    "group-admin",
+    "group-ceo",
+    "crm-manager",
+    "sales-manager",
     "finance",
   ].includes(role.id);
   const [fullName, setFullName] = useState(role.user);
@@ -91,7 +100,7 @@ function Account() {
     if (branchesResult.error) setLoadError(branchesResult.error.message);
     const profile = profileResult.data;
     setBranches((branchesResult.data ?? []) as BranchOption[]);
-    setWorkBranchId(profile?.work_branch_id ?? "");
+    setWorkBranchId(profile?.work_branch_id ?? (canSelectGlobalWide ? "global-wide" : ""));
     if (isPlatformStaff) {
       const { data, error } = await supabase
         .from("organizations")
@@ -152,7 +161,7 @@ function Account() {
       setMembershipRole(null);
     }
     setLoading(false);
-  }, [role.id, role.user, updateFullName]);
+  }, [canSelectGlobalWide, role.id, role.user, updateFullName]);
 
   useEffect(() => {
     void loadAccount();
@@ -169,7 +178,7 @@ function Account() {
       toast.error("Choose your work location.");
       return;
     }
-    if (isPlatformStaff && !organizations.some((organization) => organization.id === organizationId)) {
+    if (isPlatformStaff && role.id !== "superadmin" && !organizations.some((organization) => organization.id === organizationId)) {
       toast.error("Choose an available organization.");
       return;
     }
@@ -196,7 +205,7 @@ function Account() {
       .from("profiles")
       .update({
         full_name: normalizedName,
-        ...(isPlatformStaff ? { work_branch_id: workBranchId } : {}),
+        ...(isPlatformStaff ? { work_branch_id: workBranchId === "global-wide" ? null : workBranchId } : {}),
       })
       .eq("id", userResult.user.id);
     if (error) {
@@ -332,6 +341,7 @@ function Account() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unassigned">Choose a location</SelectItem>
+                    {canSelectGlobalWide && <SelectItem value="global-wide">Global-wide (all locations)</SelectItem>}
                     {branches.map((branch) => (
                       <SelectItem key={branch.id} value={branch.id}>{branch.name}</SelectItem>
                     ))}
@@ -341,7 +351,9 @@ function Account() {
                   Sets your default café location. This does not change your role permissions.
                 </p>
                 <div className="space-y-2 pt-2">
-                  <Label htmlFor="account-organization">Organization</Label>
+                  <Label htmlFor="account-organization">
+                    Organization{role.id === "superadmin" ? " (optional)" : ""}
+                  </Label>
                   <Select
                     value={organizationId || "unassigned"}
                     onValueChange={(value) => setOrganizationId(value === "unassigned" ? "" : value)}

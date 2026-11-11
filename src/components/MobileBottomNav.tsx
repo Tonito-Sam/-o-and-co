@@ -34,7 +34,7 @@ export function MobileBottomNav() {
   if (visibleItems.length === 0) return null;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
       <div className="mx-auto flex min-h-16 max-w-5xl items-stretch justify-around gap-1 px-2 py-1">
         {visibleItems.map((item) => {
           const isActive = item.url === "/" ? pathname === "/" : pathname.startsWith(item.url);
@@ -43,6 +43,7 @@ export function MobileBottomNav() {
             <Link
               key={item.url}
               to={item.url}
+              aria-current={isActive ? "page" : undefined}
               className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center rounded-xl px-1 py-2 text-[11px] transition-colors ${
                 isActive
                   ? "bg-brand/10 text-brand"

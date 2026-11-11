@@ -15,7 +15,9 @@ import { Route as UnionStationRouteImport } from './routes/union-station'
 import { Route as TourRequestRouteImport } from './routes/tour-request'
 import { Route as TourCalendarRouteImport } from './routes/tour-calendar'
 import { Route as TenantsRouteImport } from './routes/tenants'
+import { Route as TenantAccessRouteImport } from './routes/tenant-access'
 import { Route as SupportRouteImport } from './routes/support'
+import { Route as StaffRouteImport } from './routes/staff'
 import { Route as OutreachRouteImport } from './routes/outreach'
 import { Route as OrganizationRouteImport } from './routes/organization'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -32,6 +34,7 @@ import { Route as CommunityRouteImport } from './routes/community'
 import { Route as CafeRouteImport } from './routes/cafe'
 import { Route as BookingsRouteImport } from './routes/bookings'
 import { Route as BillingRouteImport } from './routes/billing'
+import { Route as AuditRouteImport } from './routes/audit'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AiAssistantRouteImport } from './routes/ai-assistant'
 import { Route as AccountRouteImport } from './routes/account'
@@ -77,9 +80,19 @@ const TenantsRoute = TenantsRouteImport.update({
   path: '/tenants',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TenantAccessRoute = TenantAccessRouteImport.update({
+  id: '/tenant-access',
+  path: '/tenant-access',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SupportRoute = SupportRouteImport.update({
   id: '/support',
   path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OutreachRoute = OutreachRouteImport.update({
@@ -162,6 +175,11 @@ const BillingRoute = BillingRouteImport.update({
   path: '/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AnalyticsRoute = AnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -238,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/account': typeof AccountRoute
   '/ai-assistant': typeof AiAssistantRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/bookings': typeof BookingsRoute
   '/cafe': typeof CafeRoute
@@ -254,7 +273,9 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/organization': typeof OrganizationRoute
   '/outreach': typeof OutreachRoute
+  '/staff': typeof StaffRoute
   '/support': typeof SupportRoute
+  '/tenant-access': typeof TenantAccessRoute
   '/tenants': typeof TenantsRoute
   '/tour-calendar': typeof TourCalendarRoute
   '/tour-request': typeof TourRequestRoute
@@ -277,6 +298,7 @@ export interface FileRoutesByTo {
   '/account': typeof AccountRoute
   '/ai-assistant': typeof AiAssistantRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/bookings': typeof BookingsRoute
   '/cafe': typeof CafeRoute
@@ -293,7 +315,9 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/organization': typeof OrganizationRoute
   '/outreach': typeof OutreachRoute
+  '/staff': typeof StaffRoute
   '/support': typeof SupportRoute
+  '/tenant-access': typeof TenantAccessRoute
   '/tenants': typeof TenantsRoute
   '/tour-calendar': typeof TourCalendarRoute
   '/tour-request': typeof TourRequestRoute
@@ -317,6 +341,7 @@ export interface FileRoutesById {
   '/account': typeof AccountRoute
   '/ai-assistant': typeof AiAssistantRoute
   '/analytics': typeof AnalyticsRoute
+  '/audit': typeof AuditRoute
   '/billing': typeof BillingRoute
   '/bookings': typeof BookingsRoute
   '/cafe': typeof CafeRoute
@@ -333,7 +358,9 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/organization': typeof OrganizationRoute
   '/outreach': typeof OutreachRoute
+  '/staff': typeof StaffRoute
   '/support': typeof SupportRoute
+  '/tenant-access': typeof TenantAccessRoute
   '/tenants': typeof TenantsRoute
   '/tour-calendar': typeof TourCalendarRoute
   '/tour-request': typeof TourRequestRoute
@@ -358,6 +385,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/ai-assistant'
     | '/analytics'
+    | '/audit'
     | '/billing'
     | '/bookings'
     | '/cafe'
@@ -374,7 +402,9 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/organization'
     | '/outreach'
+    | '/staff'
     | '/support'
+    | '/tenant-access'
     | '/tenants'
     | '/tour-calendar'
     | '/tour-request'
@@ -397,6 +427,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/ai-assistant'
     | '/analytics'
+    | '/audit'
     | '/billing'
     | '/bookings'
     | '/cafe'
@@ -413,7 +444,9 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/organization'
     | '/outreach'
+    | '/staff'
     | '/support'
+    | '/tenant-access'
     | '/tenants'
     | '/tour-calendar'
     | '/tour-request'
@@ -436,6 +469,7 @@ export interface FileRouteTypes {
     | '/account'
     | '/ai-assistant'
     | '/analytics'
+    | '/audit'
     | '/billing'
     | '/bookings'
     | '/cafe'
@@ -452,7 +486,9 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/organization'
     | '/outreach'
+    | '/staff'
     | '/support'
+    | '/tenant-access'
     | '/tenants'
     | '/tour-calendar'
     | '/tour-request'
@@ -476,6 +512,7 @@ export interface RootRouteChildren {
   AccountRoute: typeof AccountRoute
   AiAssistantRoute: typeof AiAssistantRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  AuditRoute: typeof AuditRoute
   BillingRoute: typeof BillingRoute
   BookingsRoute: typeof BookingsRoute
   CafeRoute: typeof CafeRoute
@@ -492,7 +529,9 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   OrganizationRoute: typeof OrganizationRoute
   OutreachRoute: typeof OutreachRoute
+  StaffRoute: typeof StaffRoute
   SupportRoute: typeof SupportRoute
+  TenantAccessRoute: typeof TenantAccessRoute
   TenantsRoute: typeof TenantsRoute
   TourCalendarRoute: typeof TourCalendarRoute
   TourRequestRoute: typeof TourRequestRoute
@@ -554,11 +593,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TenantsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tenant-access': {
+      id: '/tenant-access'
+      path: '/tenant-access'
+      fullPath: '/tenant-access'
+      preLoaderRoute: typeof TenantAccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/support': {
       id: '/support'
       path: '/support'
       fullPath: '/support'
       preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/outreach': {
@@ -671,6 +724,13 @@ declare module '@tanstack/react-router' {
       path: '/billing'
       fullPath: '/billing'
       preLoaderRoute: typeof BillingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analytics': {
@@ -790,6 +850,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountRoute: AccountRoute,
   AiAssistantRoute: AiAssistantRoute,
   AnalyticsRoute: AnalyticsRoute,
+  AuditRoute: AuditRoute,
   BillingRoute: BillingRoute,
   BookingsRoute: BookingsRoute,
   CafeRoute: CafeRoute,
@@ -806,7 +867,9 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   OrganizationRoute: OrganizationRoute,
   OutreachRoute: OutreachRoute,
+  StaffRoute: StaffRoute,
   SupportRoute: SupportRoute,
+  TenantAccessRoute: TenantAccessRoute,
   TenantsRoute: TenantsRoute,
   TourCalendarRoute: TourCalendarRoute,
   TourRequestRoute: TourRequestRoute,

@@ -5,12 +5,12 @@ export function PageHeader({
 }: { eyebrow?: string; title: string; description?: string; actions?: ReactNode }) {
   return (
     <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between mb-6">
-      <div>
+      <div className="min-w-0">
         {eyebrow && <div className="text-[11px] uppercase tracking-[0.18em] text-brand font-medium mb-1.5">{eyebrow}</div>}
-        <h1 className="font-display text-2xl md:text-3xl font-semibold text-foreground">{title}</h1>
+        <h1 className="font-display break-words text-2xl md:text-3xl font-semibold text-foreground">{title}</h1>
         {description && <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">{description}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">{actions}</div>}
     </div>
   );
 }
@@ -23,10 +23,10 @@ export function StatCard({
     accent === "warning" ? "text-warning" :
     "text-brand";
   return (
-    <div className="card-soft p-5">
+    <div className="card-soft min-w-0 p-3.5 sm:p-5">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-2 font-display text-2xl font-semibold text-foreground">{value}</div>
-      <div className="mt-1 flex items-center justify-between text-xs">
+      <div className="mt-2 break-words font-display text-xl font-semibold leading-tight text-foreground sm:text-2xl">{value}</div>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs">
         {delta && <span className={tone}>{delta}</span>}
         {hint && <span className="text-muted-foreground">{hint}</span>}
       </div>

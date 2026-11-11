@@ -20,7 +20,7 @@ begin
   if p_branch_id is not null and not exists (select 1 from public.branches where id = p_branch_id and status = 'live') then
     raise exception 'Choose a live branch.';
   end if;
-  if not exists (
+  if p_assign and not exists (
     select 1
     from public.profiles
     where id = p_user_id

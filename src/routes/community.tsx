@@ -218,7 +218,6 @@ function FeedReply({
 function Community() {
   const { role } = useRole();
   const canModerate = ["superadmin", "group-admin", "group-ceo", "crm-manager", "sales-manager"].includes(role.id);
-  const [showManagementViews, setShowManagementViews] = useState(false);
   const [draft, setDraft] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<ComposerAttachment[]>([]);
   const [expandedCommentPostId, setExpandedCommentPostId] = useState<string | null>(null);
@@ -335,7 +334,6 @@ function Community() {
           setCurrentUserId(userData.user?.id ?? "");
           setReports((reportResult.data ?? []) as CommunityPostReport[]);
           setReportedPostIds(new Set((ownReportResult.data ?? []).map(({ post_id }) => post_id as string)));
-          setShowManagementViews(canModerate);
           setLoadError("");
           setLoading(false);
         }
@@ -668,16 +666,6 @@ function Community() {
     setPosts((prev) => prev.map((item) => (item.id === postId ? { ...item, shares: item.shares + 1 } : item)));
   };
 
-  const feedMetrics = useMemo(() => {
-    const weekStart = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    return {
-      approved: posts.filter((post) => post.status === "approved").length,
-      thisWeek: posts.filter((post) => new Date(post.createdAt).getTime() >= weekStart).length,
-      reports: reports.length,
-      reactions: posts.reduce((total, post) => total + post.likes, 0),
-    };
-  }, [posts, reports.length]);
-
   const trendingTopics = useMemo(() => {
     const counts = new Map<string, number>();
     for (const post of posts) {
@@ -696,17 +684,7 @@ function Community() {
       <PageHeader
         eyebrow="Feed"
         title="The Office & Co feed"
-        description="Share updates, ideas and opportunities across the Office & Co community. Posts appear immediately; report content that concerns you."
       />
-      {showManagementViews && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <StatCard label="Live posts" value={String(feedMetrics.approved)} accent="brand" />
-          <StatCard label="Posts this week" value={String(feedMetrics.thisWeek)} accent="success" />
-          <StatCard label="Open reports" value={String(feedMetrics.reports)} accent="warning" />
-          <StatCard label="Reactions" value={String(feedMetrics.reactions)} />
-        </div>
-      )}
-
       <div className="grid lg:grid-cols-[1fr_300px] gap-6">
         <div className="space-y-4">
           <div className="card-soft p-4">
@@ -849,7 +827,7 @@ function Community() {
           ))}
         </div>
         <aside className="space-y-4">
-          {showManagementViews && (
+          {canModerate && (
             <div className="card-soft p-4">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2 font-medium">Reports to review</div>
               {reports.length === 0 ? (

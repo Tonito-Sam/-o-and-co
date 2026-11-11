@@ -188,7 +188,7 @@ function RouteAccessGuard({ pathname, children }: { pathname: string; children: 
     }
     const supabase = getSupabaseClient();
     if (!supabase) {
-      navigate({ to: "/auth/sign-in", replace: true });
+      navigate({ to: pathname === "/" ? "/welcome" : "/auth/sign-in", replace: true });
       return;
     }
 
@@ -199,7 +199,7 @@ function RouteAccessGuard({ pathname, children }: { pathname: string; children: 
       const { data, error: sessionError } = await supabase.auth.getSession();
       if (!active) return;
       if (sessionError || !data.session) {
-        navigate({ to: "/auth/sign-in", replace: true });
+        navigate({ to: pathname === "/" ? "/welcome" : "/auth/sign-in", replace: true });
         return;
       }
 
@@ -311,7 +311,7 @@ function AuthenticatedWorkspace({
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />
-          <main className="flex-1 px-4 py-6 pb-24 lg:px-8 lg:py-8 lg:pb-8">
+          <main className="flex-1 px-4 py-5 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-8 lg:pb-8">
             <Outlet />
           </main>
           <MobileBottomNav />

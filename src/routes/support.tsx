@@ -1,11 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LifeBuoy, MessageSquare, RefreshCw, Send } from "lucide-react";
+import { ArrowLeft, LifeBuoy, MessageSquare, RefreshCw, Search, Send } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -23,6 +26,7 @@ type Ticket = {
   branch_id: string | null;
   tenant_id: string | null;
   raised_by: string | null;
+  assignee_id: string | null;
   requester_name: string | null;
   organization_name: string | null;
   subject: string;
@@ -33,6 +37,9 @@ type Ticket = {
   created_at: string;
   branches: { name: string } | { name: string }[] | null;
 };
+
+type SupportAgent = { id: string; full_name: string | null; email: string | null };
+type QueueTab = "all" | "unassigned" | "mine" | "urgent";
 
 type TicketMessage = {
   id: string;
@@ -60,6 +67,13 @@ function OperationsSupport() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sendingReply, setSendingReply] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
+  const [queueTab, setQueueTab] = useState<QueueTab>("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [supportAgents, setSupportAgents] = useState<SupportAgent[]>([]);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const branchScope = role.id === "branch-manager" ? (role.branchIds ?? []).join(",") : "all";
@@ -76,7 +90,7 @@ function OperationsSupport() {
     let query = supabase
       .from("support_tickets")
       .select(
-        "id,reference,branch_id,tenant_id,raised_by,requester_name,organization_name,subject,body,priority,status,sla_due_at,created_at,branches(name)",
+        "id,reference,branch_id,tenant_id,raised_by,assignee_id,requester_name,organization_name,subject,body,priority,status,sla_due_at,created_at,branches(name)",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -85,6 +99,17 @@ function OperationsSupport() {
         ? query.in("branch_id", branchIds)
         : query.eq("branch_id", "00000000-0000-0000-0000-000000000000");
     const { data, error: queryError } = await query;
+    const { data: authData } = await supabase.auth.getUser();
+    setCurrentUserId(authData.user?.id ?? "");
+    if (["superadmin", "group-ceo"].includes(role.id)) {
+      const { data: agents, error: agentError } = await supabase
+        .from("profiles")
+        .select("id,full_name,email")
+        .or("email.ilike.%@officeandco.co.za,email.ilike.%@officeandco.co.ca")
+        .order("full_name");
+      if (agentError) toast.error(`Could not load support assignees: ${agentError.message}`);
+      setSupportAgents((agents ?? []) as SupportAgent[]);
+    }
     if (queryError) {
       setError(queryError.message);
       setTickets([]);
@@ -93,7 +118,7 @@ function OperationsSupport() {
       setTickets((data ?? []) as Ticket[]);
     }
     setLoading(false);
-  }, [branchScope]);
+  }, [branchScope, role.id]);
 
   useEffect(() => {
     void loadTickets();
@@ -175,6 +200,48 @@ function OperationsSupport() {
     toast.success(status === "resolved" ? "Ticket resolved." : "Ticket status updated.");
   };
 
+  const updateAssignee = async (ticketId: string, assigneeId: string | null) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const { error: updateError } = await supabase
+      .from("support_tickets")
+      .update({ assignee_id: assigneeId })
+      .eq("id", ticketId);
+    if (updateError) {
+      toast.error(updateError.message);
+      return;
+    }
+    setTickets((current) => current.map((ticket) => ticket.id === ticketId ? { ...ticket, assignee_id: assigneeId } : ticket));
+    setSelectedTicket((current) => current?.id === ticketId ? { ...current, assignee_id: assigneeId } : current);
+    toast.success(assigneeId ? "Ticket assigned." : "Ticket unassigned.");
+  };
+
+  const applyBulkUpdate = async (updates: { assignee_id?: string | null; status?: "resolved" | "closed" }, successMessage: string) => {
+    const ids = [...selectedTicketIds];
+    const supabase = getSupabaseClient();
+    if (!supabase || ids.length === 0) return;
+    setBulkUpdating(true);
+    const { error: updateError } = await supabase.from("support_tickets").update(updates).in("id", ids);
+    setBulkUpdating(false);
+    if (updateError) {
+      toast.error(updateError.message);
+      return;
+    }
+    setTickets((current) => current.map((ticket) => ids.includes(ticket.id) ? { ...ticket, ...updates } : ticket));
+    setSelectedTicket((current) => current && ids.includes(current.id) ? { ...current, ...updates } : current);
+    setSelectedTicketIds(new Set());
+    toast.success(successMessage);
+  };
+
+  const toggleTicketSelection = (ticketId: string, checked: boolean | "indeterminate") => {
+    setSelectedTicketIds((current) => {
+      const next = new Set(current);
+      if (checked === true) next.add(ticketId);
+      else next.delete(ticketId);
+      return next;
+    });
+  };
+
   const openTickets = useMemo(
     () => tickets.filter((ticket) => !["resolved", "closed"].includes(ticket.status)),
     [tickets],
@@ -185,16 +252,31 @@ function OperationsSupport() {
   const urgentTickets = openTickets.filter((ticket) =>
     ["urgent", "high"].includes(ticket.priority),
   );
+  const visibleTickets = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return tickets.filter((ticket) => {
+      const matchesTab = queueTab === "all"
+        || (queueTab === "unassigned" && !ticket.assignee_id)
+        || (queueTab === "mine" && ticket.assignee_id === currentUserId)
+        || (queueTab === "urgent" && ["urgent", "high"].includes(ticket.priority));
+      const matchesStatus = statusFilter === "all" || ticket.status === statusFilter;
+      const matchesSearch = !query || [ticket.reference, ticket.requester_name, ticket.organization_name, ticket.subject]
+        .some((value) => value?.toLowerCase().includes(query));
+      return matchesTab && matchesStatus && matchesSearch;
+    });
+  }, [tickets, queueTab, statusFilter, search, currentUserId]);
+  const canManageQueue = ["superadmin", "group-ceo", "sales-manager", "community-manager", "branch-manager"].includes(role.id);
+  const canAssignQueue = ["superadmin", "group-ceo"].includes(role.id);
 
   return (
     <div className="mx-auto max-w-350 space-y-5">
       <PageHeader
         eyebrow={
-          role.id === "group-ceo" ? "Group Operations · Support" : "Branch Operations · Support"
+          role.id === "superadmin" ? "Platform Administration · Support" : role.id === "group-ceo" ? "Group Operations · Support" : "Branch Operations · Support"
         }
-        title={role.id === "group-ceo" ? "Group support health" : "Support queue"}
+        title={role.id === "superadmin" ? "Platform support queue" : role.id === "group-ceo" ? "Group support health" : "Support queue"}
         description={
-          role.id === "group-ceo"
+          ["superadmin", "group-ceo"].includes(role.id)
             ? "Live service requests and SLA risks across active branches."
             : "Live service requests and SLA risks for your assigned branches."
         }
@@ -245,12 +327,46 @@ function OperationsSupport() {
         />
       </div>
 
+      <div className="space-y-3">
+        <Tabs value={queueTab} onValueChange={(value) => setQueueTab(value as QueueTab)}>
+          <TabsList aria-label="Support queue filters">
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="unassigned">Unassigned</TabsTrigger>
+            <TabsTrigger value="mine">Mine</TabsTrigger>
+            <TabsTrigger value="urgent">Urgent</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-52 flex-1 sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tickets…" className="pl-9" />
+          </div>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-44"><SelectValue placeholder="All statuses" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="in_progress">In progress</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+          {selectedTicketIds.size > 0 && canManageQueue && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">{selectedTicketIds.size} selected</span>
+              {currentUserId && <Button size="sm" variant="outline" disabled={bulkUpdating} onClick={() => void applyBulkUpdate({ assignee_id: currentUserId }, "Selected tickets assigned to you.")}>Assign to me</Button>}
+              <Button size="sm" variant="outline" disabled={bulkUpdating} onClick={() => void applyBulkUpdate({ status: "resolved" }, "Selected tickets resolved.")}>Resolve</Button>
+              <Button size="sm" variant="outline" disabled={bulkUpdating} onClick={() => void applyBulkUpdate({ status: "closed" }, "Selected tickets closed.")}>Close</Button>
+            </div>
+          )}
+        </div>
+      </div>
+
       <section className="overflow-hidden rounded-lg border bg-card">
         <div className="border-b p-4">
-          <h2 className="font-display text-base font-semibold">Live service queue</h2>
+          <h2 className="font-display text-base font-semibold">Support queue</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Source: support ticket records. Response-time and satisfaction metrics are not reported
-            without stored measurements.
+            Select a ticket to read and reply to its conversation.
           </p>
         </div>
         {loading ? (
@@ -259,133 +375,181 @@ function OperationsSupport() {
           <div className="grid justify-items-center gap-2 p-10 text-center">
             <LifeBuoy className="size-7 text-muted-foreground/60" />
             <p className="text-sm font-medium">No support tickets found</p>
-            <p className="text-xs text-muted-foreground">
-              There are no ticket records in the current scope.
-            </p>
+            <p className="text-xs text-muted-foreground">There are no ticket records in the current scope.</p>
           </div>
+        ) : visibleTickets.length === 0 ? (
+          <p className="p-5 text-sm text-muted-foreground">No tickets match these filters.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="border-b bg-muted/30 text-[11px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Reference</th>
-                  <th className="px-4 py-3 font-medium">Sender</th>
-                  <th className="px-4 py-3 font-medium">Organization</th>
-                  {role.id === "group-ceo" ? (
-                    <th className="px-4 py-3 font-medium">Branch</th>
-                  ) : null}
-                  <th className="px-4 py-3 font-medium">Subject</th>
-                  <th className="px-4 py-3 font-medium">Priority</th>
-                  <th className="px-4 py-3 font-medium">SLA due</th>
-                  <th className="px-4 py-3 text-right font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {tickets.map((ticket) => {
-                  const branch = Array.isArray(ticket.branches)
-                    ? ticket.branches[0]
-                    : ticket.branches;
-                  const pastSla =
-                    ticket.sla_due_at &&
-                    new Date(ticket.sla_due_at).getTime() < Date.now() &&
-                    !["resolved", "closed"].includes(ticket.status);
+          <div className="grid min-h-[620px] grid-cols-1 md:grid-cols-[minmax(260px,340px)_minmax(0,1fr)]">
+            <div className={`${selectedTicket ? "hidden md:flex" : "flex"} min-h-0 flex-col border-r`}>
+              <div className="flex items-center justify-between border-b px-4 py-3">
+                <span className="text-xs font-medium text-muted-foreground">{visibleTickets.length} tickets</span>
+                {canManageQueue && (
+                  <Checkbox
+                    checked={visibleTickets.length > 0 && visibleTickets.every(({ id }) => selectedTicketIds.has(id))}
+                    onCheckedChange={(checked) => setSelectedTicketIds((current) => {
+                      const next = new Set(current);
+                      for (const ticket of visibleTickets) {
+                        if (checked === true) next.add(ticket.id);
+                        else next.delete(ticket.id);
+                      }
+                      return next;
+                    })}
+                    aria-label="Select visible tickets"
+                  />
+                )}
+              </div>
+              <ul className="min-h-0 flex-1 divide-y overflow-y-auto md:max-h-[720px]">
+                {visibleTickets.map((ticket) => {
+                  const selected = selectedTicket?.id === ticket.id;
+                  const branch = Array.isArray(ticket.branches) ? ticket.branches[0] : ticket.branches;
                   return (
-                    <tr key={ticket.id} className="hover:bg-muted/20">
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {ticket.reference ?? ticket.id.slice(0, 8)}
-                      </td>
-                      <td className="px-4 py-3">{ticket.requester_name ?? "Unknown requester"}</td>
-                      <td className="px-4 py-3">{ticket.organization_name ?? "Not linked"}</td>
-                      {role.id === "group-ceo" ? (
-                        <td className="px-4 py-3">{branch?.name ?? "Unassigned"}</td>
-                      ) : null}
-                      <td className="px-4 py-3 font-medium">
-                        <Button type="button" variant="link" className="h-auto whitespace-normal p-0 text-left" onClick={() => void openTicket(ticket)}>
-                          <MessageSquare className="mr-1 size-3.5 shrink-0" />{ticket.subject}
-                        </Button>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge
-                          variant={
-                            ["urgent", "high"].includes(ticket.priority)
-                              ? "destructive"
-                              : "secondary"
-                          }
-                        >
-                          {ticket.priority}
-                        </Badge>
-                      </td>
-                      <td
-                        className={`px-4 py-3 text-xs ${pastSla ? "font-medium text-destructive" : "text-muted-foreground"}`}
+                    <li key={ticket.id} className={`flex items-start gap-2 px-3 py-1 ${selected ? "bg-muted/40" : "hover:bg-muted/20"}`}>
+                      {canManageQueue && (
+                        <Checkbox
+                          className="mt-3"
+                          checked={selectedTicketIds.has(ticket.id)}
+                          onCheckedChange={(checked) => toggleTicketSelection(ticket.id, checked)}
+                          aria-label={`Select ticket ${ticket.reference ?? ticket.id.slice(0, 8)}`}
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void openTicket(ticket)}
+                        aria-current={selected ? "true" : undefined}
+                        className="min-w-0 flex-1 px-1 py-3 text-left"
                       >
-                        {ticket.sla_due_at
-                          ? new Date(ticket.sla_due_at).toLocaleString()
-                          : "Not set"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Badge
-                          variant={
-                            ["resolved", "closed"].includes(ticket.status) ? "default" : "outline"
-                          }
-                        >
-                          {ticket.status.replaceAll("_", " ")}
-                        </Badge>
-                      </td>
-                    </tr>
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="truncate text-sm font-medium">{ticket.subject}</span>
+                          {ticket.priority === "urgent" && <span className="sr-only">Urgent</span>}
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {ticket.requester_name ?? "Unknown requester"} · {ticket.organization_name ?? "Not linked"}
+                        </p>
+                        {ticket.body && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{ticket.body}</p>}
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <Badge variant={ticket.status === "open" ? "destructive" : "outline"} className="capitalize text-[10px]">
+                            {ticket.status.replaceAll("_", " ")}
+                          </Badge>
+                          <Badge variant={["urgent", "high"].includes(ticket.priority) ? "destructive" : "secondary"} className="capitalize text-[10px]">
+                            {ticket.priority}
+                          </Badge>
+                          {role.id === "group-ceo" || role.id === "superadmin" ? (
+                            <span className="text-[10px] text-muted-foreground">{branch?.name ?? "Unassigned branch"}</span>
+                          ) : null}
+                          <span className="ml-auto text-[10px] text-muted-foreground">{new Date(ticket.created_at).toLocaleDateString()}</span>
+                        </div>
+                      </button>
+                    </li>
                   );
                 })}
-              </tbody>
-            </table>
+              </ul>
+            </div>
+
+            <div className={`${selectedTicket ? "flex" : "hidden md:flex"} min-w-0 flex-col`}>
+              {selectedTicket ? (
+                <>
+                  <header className="border-b px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <Button type="button" variant="ghost" size="icon" className="-ml-2 size-8 shrink-0 md:hidden" onClick={() => setSelectedTicket(null)} aria-label="Back to ticket queue">
+                        <ArrowLeft className="size-4" />
+                      </Button>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-display text-sm font-semibold">{selectedTicket.subject}</h3>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span>{selectedTicket.reference ?? selectedTicket.id.slice(0, 8)}</span>
+                          <span>·</span>
+                          <span>{selectedTicket.requester_name ?? "Unknown requester"}</span>
+                          <span>·</span>
+                          <span>{selectedTicket.organization_name ?? "Not linked"}</span>
+                          <Badge variant={selectedTicket.status === "open" ? "destructive" : "outline"} className="capitalize">
+                            {selectedTicket.status.replaceAll("_", " ")}
+                          </Badge>
+                          <Badge variant={["urgent", "high"].includes(selectedTicket.priority) ? "destructive" : "secondary"} className="capitalize">
+                            {selectedTicket.priority}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 pl-10 md:pl-0">
+                      {canAssignQueue && (
+                        <Select value={selectedTicket.assignee_id ?? "unassigned"} onValueChange={(value) => void updateAssignee(selectedTicket.id, value === "unassigned" ? null : value)}>
+                          <SelectTrigger className="h-8 w-48 text-xs"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                            {selectedTicket.assignee_id && !supportAgents.some(({ id }) => id === selectedTicket.assignee_id) && <SelectItem value={selectedTicket.assignee_id}>Current assignee</SelectItem>}
+                            {supportAgents.map((agent) => <SelectItem key={agent.id} value={agent.id}>{agent.full_name || agent.email || "Staff member"}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {selectedTicket.sla_due_at && (
+                        <span className={`text-xs ${new Date(selectedTicket.sla_due_at).getTime() < Date.now() && !["resolved", "closed"].includes(selectedTicket.status) ? "font-medium text-destructive" : "text-muted-foreground"}`}>
+                          SLA {new Date(selectedTicket.sla_due_at).toLocaleString()}
+                        </span>
+                      )}
+                      {selectedTicket.status !== "in_progress" && selectedTicket.status !== "resolved" && selectedTicket.status !== "closed" && (
+                        <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={updatingStatus} onClick={() => void updateTicketStatus("in_progress")}>In progress</Button>
+                      )}
+                      {selectedTicket.status === "resolved" || selectedTicket.status === "closed" ? (
+                        <Button type="button" size="sm" variant="outline" disabled={updatingStatus} onClick={() => void updateTicketStatus("open")}>Reopen</Button>
+                      ) : (
+                        <Button type="button" size="sm" disabled={updatingStatus} onClick={() => void updateTicketStatus("resolved")}>Resolve</Button>
+                      )}
+                    </div>
+                  </header>
+
+                  <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 md:max-h-[540px]">
+                    <div className="flex justify-start">
+                      <div className="max-w-[88%] rounded-lg border bg-muted/40 px-3 py-2">
+                        <div className="text-[11px] font-medium">{selectedTicket.requester_name ?? "Requester"} · Original request</div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm">{selectedTicket.body || "No description provided."}</p>
+                        <p className="mt-2 text-[10px] text-muted-foreground">{new Date(selectedTicket.created_at).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    {loadingMessages ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><RefreshCw className="size-4 animate-spin" />Loading conversation…</div>
+                    ) : ticketMessages.length === 0 ? (
+                      <p className="text-center text-xs text-muted-foreground">No replies yet.</p>
+                    ) : ticketMessages.map((message) => {
+                      const isRequester = message.author_id === selectedTicket.raised_by;
+                      return (
+                        <div key={message.id} className={`flex ${isRequester ? "justify-start" : "justify-end"}`}>
+                          <div className={`max-w-[88%] rounded-lg px-3 py-2 ${isRequester ? "border bg-muted/40" : "bg-primary text-primary-foreground"}`}>
+                            <div className={`text-[11px] font-medium ${isRequester ? "" : "text-primary-foreground/80"}`}>
+                              {isRequester ? selectedTicket.requester_name ?? "Requester" : "Support team"}
+                            </div>
+                            <p className="mt-1 whitespace-pre-wrap text-sm">{message.message}</p>
+                            <p className={`mt-2 text-[10px] ${isRequester ? "text-muted-foreground" : "text-primary-foreground/70"}`}>
+                              {new Date(message.created_at).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <form onSubmit={(event) => void sendReply(event)} className="space-y-2 border-t p-3">
+                    <Label htmlFor="support-ticket-reply">Reply to requester</Label>
+                    <Textarea id="support-ticket-reply" required maxLength={5000} rows={3} value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Write a response…" />
+                    <div className="flex items-center justify-between gap-3">
+                      {replyError ? <p role="alert" className="text-sm text-destructive">{replyError}</p> : <span className="text-xs text-muted-foreground">Sent to the requester.</span>}
+                      <Button type="submit" disabled={sendingReply || !reply.trim()} className="shrink-0 gap-2">
+                        <Send className="size-4" />{sendingReply ? "Sending…" : "Send reply"}
+                      </Button>
+                    </div>
+                  </form>
+                </>
+              ) : (
+                <div className="hidden flex-1 flex-col items-center justify-center gap-2 p-8 text-center md:flex">
+                  <MessageSquare className="size-7 text-muted-foreground/60" />
+                  <p className="text-sm font-medium">Select a ticket</p>
+                  <p className="text-xs text-muted-foreground">Its conversation will appear here.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </section>
-
-      <Dialog open={selectedTicket !== null} onOpenChange={(open) => { if (!open) setSelectedTicket(null); }}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-          {selectedTicket && <>
-            <DialogHeader>
-              <DialogTitle>{selectedTicket.subject}</DialogTitle>
-              <DialogDescription>
-                {selectedTicket.reference ?? selectedTicket.id.slice(0, 8)} · {selectedTicket.priority} priority · {selectedTicket.status.replaceAll("_", " ")}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <div className="rounded-md border bg-muted/30 p-3">
-                <div className="text-xs font-medium">Original request</div>
-                <p className="mt-2 whitespace-pre-wrap text-sm">{selectedTicket.body || "No description provided."}</p>
-                <p className="mt-2 text-[11px] text-muted-foreground">{new Date(selectedTicket.created_at).toLocaleString()}</p>
-              </div>
-              {loadingMessages ? (
-                <p className="py-4 text-sm text-muted-foreground">Loading replies…</p>
-              ) : ticketMessages.map((message) => (
-                <div key={message.id} className="rounded-md border p-3">
-                  <div className="text-xs font-medium">{message.author_id === selectedTicket.raised_by ? "Requester" : "Support team"}</div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm">{message.message}</p>
-                  <p className="mt-2 text-[11px] text-muted-foreground">{new Date(message.created_at).toLocaleString()}</p>
-                </div>
-              ))}
-            </div>
-            <form onSubmit={(event) => void sendReply(event)} className="space-y-2">
-              <Label htmlFor="support-ticket-reply">Reply to requester</Label>
-              <Textarea id="support-ticket-reply" required maxLength={5000} rows={4} value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Write a response…" />
-              {replyError && <p role="alert" className="text-sm text-destructive">{replyError}</p>}
-              <Button type="submit" disabled={sendingReply || !reply.trim()} className="gap-2">
-                <Send className="size-4" />{sendingReply ? "Sending…" : "Send reply"}
-              </Button>
-            </form>
-            <DialogFooter>
-              {selectedTicket.status !== "in_progress" && selectedTicket.status !== "resolved" && selectedTicket.status !== "closed" && (
-                <Button variant="outline" disabled={updatingStatus} onClick={() => void updateTicketStatus("in_progress")}>Mark in progress</Button>
-              )}
-              {selectedTicket.status === "resolved" || selectedTicket.status === "closed" ? (
-                <Button variant="outline" disabled={updatingStatus} onClick={() => void updateTicketStatus("open")}>Reopen ticket</Button>
-              ) : (
-                <Button disabled={updatingStatus} onClick={() => void updateTicketStatus("resolved")}>Resolve ticket</Button>
-              )}
-            </DialogFooter>
-          </>}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

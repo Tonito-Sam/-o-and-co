@@ -30,13 +30,13 @@ Branch assignments are stored in `public.user_roles.branch_id`. The branch acces
 
 ## Office & Co staff account deletion
 
-The superadmin Staffs directory can permanently delete non-superadmin accounts using the `delete-office-staff` Edge Function. It verifies the caller's superadmin role, restricts targets to Office & Co email domains, and prevents self-deletion or deletion of another superadmin. Deploy it with:
+The superadmin Staff and Tenant accounts directories use the `manage-platform-account` Edge Function to suspend, reactivate, or delete accounts. It verifies the caller's superadmin role and protects privileged accounts. Deploy it with:
 
 ```sh
-supabase functions deploy delete-office-staff --project-ref <project-ref>
+supabase functions deploy manage-platform-account --project-ref <project-ref>
 ```
 
-The function uses the standard Supabase Edge Function `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` secrets. Deleting the Auth user cascades to its profile, platform roles, and organization membership.
+The function uses the standard Supabase Edge Function `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` secrets. It preserves required historical references before deleting the Auth user, then lets profile-linked memberships and roles cascade.
 
 The financial overview reports actual recurring rent, invoice collections and receivables, qualified pipeline, and pending bookings. The current schema does not contain an expense ledger, so profit, cost leakage, and operating margin are intentionally not reported until expense data is connected.
 

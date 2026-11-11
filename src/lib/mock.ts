@@ -827,6 +827,8 @@ export const ROLES: RoleDef[] = [
     scope: "Full platform administration",
     nav: [
       "/",
+      "/staff",
+      "/tenant-access",
       "/analytics",
       "/crm",
       "/leads-intelligence",
