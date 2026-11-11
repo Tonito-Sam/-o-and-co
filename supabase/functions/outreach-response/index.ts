@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { OUTREACH_EMAIL, OUTREACH_FROM, sendSmtpEmail } from "../_shared/smtp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -91,8 +92,9 @@ async function sendResponseFollowUp(
     metadata: Record<string, unknown> | null;
   },
 ) {
-  const apiKey = Deno.env.get("RESEND_API_KEY");
-  if (!apiKey) throw new Error("Email delivery is not configured.");
+  if (!Deno.env.get("SMTP_HOST") || !Deno.env.get("SMTP_USER") || !Deno.env.get("SMTP_PASS")) {
+    throw new Error("SMTP delivery is not configured.");
+  }
 
   const { data: template, error: templateError } = await admin
     .from("crm_email_templates")
@@ -120,7 +122,7 @@ async function sendResponseFollowUp(
   const subject = renderTemplate(template.subject, replacements);
   const text = renderTemplate(template.body, replacements);
   const html = `<div style="font-family:Arial,sans-serif;color:#17202a;line-height:1.6;max-width:640px;margin:0 auto"><p>${escapeHtml(text).replace(/\r?\n/g, "<br>")}</p></div>`;
-  const sender = Deno.env.get("EMAIL_FROM") || "Office & Co <hello@officeand.co>";
+  const sender = OUTREACH_FROM;
 
   const { data: followUp, error: insertError } = await admin
     .from("outreach_deliveries")
@@ -137,25 +139,24 @@ async function sendResponseFollowUp(
         source: "confirmed_response_button",
         triggered_by_delivery: delivery.id,
         template_id: "reply_follow_up",
+        sender,
+        reply_to: OUTREACH_EMAIL,
       },
     })
     .select("id")
     .single();
   if (insertError || !followUp) throw new Error("Could not log the response follow-up.");
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: sender, to: [delivery.recipient_email], subject, html, text }),
-  });
-  const result = await response.json().catch(() => ({})) as { id?: string; message?: string };
-  if (!response.ok) {
+  let smtpResponse: string;
+  try {
+    smtpResponse = await sendSmtpEmail({ to: delivery.recipient_email, subject, html, text });
+  } catch (error) {
     await admin.from("outreach_deliveries").update({ status: "failed" }).eq("id", followUp.id);
-    throw new Error(result.message ?? "The follow-up email could not be sent.");
+    throw error instanceof Error ? error : new Error("The follow-up email could not be sent.");
   }
 
   await admin.from("outreach_deliveries").update({
-    provider_message_id: result.id ?? null,
+    provider_message_id: smtpResponse.slice(0, 500),
     status: "sent",
     sent_at: new Date().toISOString(),
     metadata: {
@@ -163,6 +164,7 @@ async function sendResponseFollowUp(
       triggered_by_delivery: delivery.id,
       template_id: "reply_follow_up",
       sender,
+      reply_to: OUTREACH_EMAIL,
     },
   }).eq("id", followUp.id);
 }
@@ -184,7 +186,7 @@ Deno.serve(async (request) => {
       .select("id,delivery_id,expires_at,used_at")
       .eq("token_hash", tokenHash)
       .maybeSingle();
-    if (error || !action || action.used_at || new Date(action.expires_at).getTime() <= Date.now()) {
+    if (error || !action || action.used_at || (action.expires_at && new Date(action.expires_at).getTime() <= Date.now())) {
       return htmlResponse(resultPage("Link unavailable", "This response link has expired or has already been used."), 410);
     }
 

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { OUTREACH_EMAIL, OUTREACH_FROM, sendSmtpEmail } from "../_shared/smtp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +20,7 @@ type SendOutreachRequest = {
   callbackPreference?: CallbackPreference;
   consentStatus?: ConsentStatus;
   prospectId?: string;
+  prospectIds?: string[];
   campaignName?: string;
   consentConfirmed?: boolean;
 };
@@ -58,7 +60,7 @@ function buildBodyText(
     ``,
     "Regards,",
     "Office & Co",
-    "hello@officeand.co",
+    OUTREACH_EMAIL,
   ].join("\n");
 }
 
@@ -79,7 +81,7 @@ function buildHtml(
       <p>If this is helpful, confirm that you would like us to arrange a short call:</p>
       <p><a href="${escapeHtml(yesUrl)}" style="display:inline-block;background:#17202a;color:#ffffff;text-decoration:none;padding:12px 18px;border-radius:6px;font-weight:600">Yes, arrange a call</a></p>
       <p><a href="${escapeHtml(noUrl)}" style="color:#505b66">No, stop follow-up emails</a></p>
-      <p>Thank you,<br />Office & Co<br />hello@officeand.co</p>
+      <p>Thank you,<br />Office & Co<br />${OUTREACH_EMAIL}</p>
     </div>
   `;
 }
@@ -108,8 +110,7 @@ async function sendCampaign(req: Request, payload: SendOutreachRequest) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const apiKey = Deno.env.get("RESEND_API_KEY");
-  const sender = Deno.env.get("EMAIL_FROM") || "Office & Co <hello@officeand.co>";
+  const sender = OUTREACH_FROM;
   const authorization = req.headers.get("Authorization");
   const name = payload.campaignName?.trim() || "Crawler prospect campaign";
   const subject = payload.subject?.trim() || "";
@@ -136,11 +137,18 @@ async function sendCampaign(req: Request, payload: SendOutreachRequest) {
   if (payload.consentConfirmed !== true) {
     return json({ error: "Confirm that all campaign recipients have explicitly opted in." }, 400);
   }
+  const prospectIds = [...new Set((payload.prospectIds ?? []).filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)))];
+  if (!prospectIds.length || prospectIds.length > 500) {
+    return json({ error: "Select between 1 and 500 prospects for this campaign." }, 400);
+  }
   if (name.length > 120 || subject.length < 1 || subject.length > 200 || body.length < 1 || body.length > 5000) {
     return json({ error: "Campaign name, subject, or message is outside the allowed length." }, 400);
   }
-  if (!apiKey) {
-    return json({ error: "Email delivery is not configured. Set RESEND_API_KEY and EMAIL_FROM." }, 503);
+  if (!Deno.env.get("SMTP_HOST") || !Deno.env.get("SMTP_USER") || !Deno.env.get("SMTP_PASS")) {
+    return json({ error: "SMTP delivery is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_PORT secrets." }, 503);
+  }
+  if (Number(Deno.env.get("SMTP_PORT") ?? "465") !== 465) {
+    return json({ error: "Supabase SMTP delivery requires implicit TLS on port 465; ports 25 and 587 are blocked." }, 503);
   }
 
   const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -152,6 +160,7 @@ async function sendCampaign(req: Request, payload: SendOutreachRequest) {
       .from("prospect_contacts")
       .select("prospect_id,value,prospect_profiles(company_name)")
       .eq("kind", "email")
+      .in("prospect_id", prospectIds)
       .range(offset, offset + 999);
     if (error) return json({ error: "Could not load crawler-captured email addresses." }, 500);
     for (const contact of data ?? []) {
@@ -208,75 +217,80 @@ async function sendCampaign(req: Request, payload: SendOutreachRequest) {
     return json({ error: campaignError?.message ?? "Could not create campaign record." }, 500);
   }
 
-  const html = `<div style="font-family:Arial,sans-serif;color:#111827;line-height:1.6;max-width:640px;margin:0 auto"><p>Hello,</p><p>${escapeHtml(body).replace(/\r?\n/g, "<br>")}</p><p>To opt out of future marketing emails, reply STOP.</p><p>Regards,<br>Office &amp; Co<br>hello@officeand.co</p></div>`;
-  const text = `Hello,\n\n${body}\n\nTo opt out of future marketing emails, reply STOP.\n\nRegards,\nOffice & Co\nhello@officeand.co`;
   let sent = 0;
   let failed = 0;
   let providerError: string | null = null;
 
-  for (let offset = 0; offset < eligibleRecipients.length; offset += 100) {
-    const batch = eligibleRecipients.slice(offset, offset + 100);
+  for (const recipient of eligibleRecipients) {
+    const { data: delivery, error: deliveryInsertError } = await admin
+      .from("outreach_deliveries")
+      .insert({
+        campaign_id: campaign.id,
+        prospect_id: recipient.prospectId,
+        recipient_email: recipient.email,
+        company_name: recipient.companyName,
+        callback_preference: "unspecified",
+        consent_status: "explicitly_opted_in",
+        subject,
+        template_version: "campaign-v1",
+        status: "queued",
+        metadata: { campaign_name: name, sender, reply_to: OUTREACH_EMAIL, source: "crawler_contacts" },
+      })
+      .select("id")
+      .single();
+    if (deliveryInsertError || !delivery) {
+      failed += 1;
+      providerError ??= deliveryInsertError?.message ?? "Could not record a campaign delivery.";
+      continue;
+    }
+
+    const responseToken = createResponseToken();
+    const { error: tokenError } = await admin.from("outreach_response_tokens").insert({
+      delivery_id: delivery.id,
+      token_hash: await hashResponseToken(responseToken),
+      expires_at: null,
+    });
+    if (tokenError) {
+      await admin.from("outreach_deliveries").update({ status: "failed" }).eq("id", delivery.id);
+      failed += 1;
+      providerError ??= "Could not create a secure unsubscribe link.";
+      continue;
+    }
+
+    const unsubscribeUrl = new URL("/functions/v1/outreach-response", supabaseUrl);
+    unsubscribeUrl.searchParams.set("token", responseToken);
+    unsubscribeUrl.searchParams.set("response", "no");
+    const unsubscribeLink = unsubscribeUrl.toString();
+    const html = `<div style="font-family:Arial,sans-serif;color:#111827;line-height:1.6;max-width:640px;margin:0 auto"><p>Hello,</p><p>${escapeHtml(body).replace(/\r?\n/g, "<br>")}</p><p>To opt out of future marketing emails, <a href="${escapeHtml(unsubscribeLink)}">unsubscribe here</a>.</p><p>Regards,<br>Office &amp; Co<br>${OUTREACH_EMAIL}</p></div>`;
+    const text = `Hello,\n\n${body}\n\nTo opt out of future marketing emails, unsubscribe here: ${unsubscribeLink}\n\nRegards,\nOffice & Co\n${OUTREACH_EMAIL}`;
+
     try {
-      const response = await fetch("https://api.resend.com/emails/batch", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify(batch.map((recipient) => ({
-          from: sender,
-          to: [recipient.email],
-          subject,
-          html,
-          text,
-        }))),
-      });
-      const result = await response.json().catch(() => ({})) as {
-        data?: Array<{ id?: string }>;
-        message?: string;
-      };
-      if (!response.ok || !Array.isArray(result.data) || result.data.length !== batch.length) {
-        providerError = result.message ?? "Email provider rejected a campaign batch.";
-        throw new Error(providerError);
-      }
+      const smtpResponse = await sendSmtpEmail({ to: recipient.email, subject, html, text });
       const sentAt = new Date().toISOString();
-      const { error: deliveryError } = await admin.from("outreach_deliveries").insert(
-        batch.map((recipient, index) => ({
-          campaign_id: campaign.id,
-          prospect_id: recipient.prospectId,
-          recipient_email: recipient.email,
-          company_name: recipient.companyName,
-          callback_preference: "unspecified",
-          consent_status: "explicitly_opted_in",
-          provider_message_id: result.data?.[index]?.id ?? null,
-          subject,
-          template_version: "campaign-v1",
+      const { error: deliveryUpdateError } = await admin
+        .from("outreach_deliveries")
+        .update({
+          provider_message_id: smtpResponse.slice(0, 500),
           status: "sent",
           sent_at: sentAt,
-          metadata: { campaign_name: name, sender, source: "crawler_contacts" },
-        })),
-      );
-      if (deliveryError) console.error("Failed to log campaign deliveries", deliveryError);
-      sent += batch.length;
+        })
+        .eq("id", delivery.id);
+      if (deliveryUpdateError) {
+        console.error("SMTP accepted a campaign message but delivery status could not be updated", deliveryUpdateError);
+      }
+      sent += 1;
     } catch (error) {
       providerError = error instanceof Error ? error.message : "Campaign delivery failed.";
-      const failedAt = new Date().toISOString();
-      const failedRecipients = eligibleRecipients.slice(offset);
-      const { error: deliveryError } = await admin.from("outreach_deliveries").insert(
-        failedRecipients.map((recipient) => ({
-          campaign_id: campaign.id,
-          prospect_id: recipient.prospectId,
-          recipient_email: recipient.email,
-          company_name: recipient.companyName,
-          callback_preference: "unspecified",
-          consent_status: "explicitly_opted_in",
-          subject,
-          template_version: "campaign-v1",
+      await admin.from("outreach_response_tokens").delete().eq("delivery_id", delivery.id);
+      const { error: deliveryUpdateError } = await admin
+        .from("outreach_deliveries")
+        .update({
           status: "failed",
-          metadata: { campaign_name: name, sender, source: "crawler_contacts", error: providerError },
-          created_at: failedAt,
-        })),
-      );
-      if (deliveryError) console.error("Failed to log failed campaign deliveries", deliveryError);
-      failed = failedRecipients.length;
-      break;
+          metadata: { campaign_name: name, sender, reply_to: OUTREACH_EMAIL, source: "crawler_contacts", error: providerError },
+        })
+        .eq("id", delivery.id);
+      if (deliveryUpdateError) console.error("Failed to record SMTP delivery failure", deliveryUpdateError);
+      failed += 1;
     }
   }
 
@@ -343,24 +357,37 @@ Deno.serve(async (req) => {
       return json({ error: "Sales or executive access is required to send outreach." }, 403);
     }
 
-    const apiKey = Deno.env.get("RESEND_API_KEY");
-    const sender = Deno.env.get("EMAIL_FROM") || "Office & Co <hello@officeand.co>";
-
-    if (!apiKey) {
+    const sender = OUTREACH_FROM;
+    if (!Deno.env.get("SMTP_HOST") || !Deno.env.get("SMTP_USER") || !Deno.env.get("SMTP_PASS")) {
       return json({
-        error: "Email delivery is not configured. Set RESEND_API_KEY and EMAIL_FROM in your Supabase project secrets first.",
+        error: "SMTP delivery is not configured. Set SMTP_HOST, SMTP_USER, SMTP_PASS, and SMTP_PORT secrets.",
       }, 503);
+    }
+    if (Number(Deno.env.get("SMTP_PORT") ?? "465") !== 465) {
+      return json({ error: "Supabase SMTP delivery requires implicit TLS on port 465; ports 25 and 587 are blocked." }, 503);
     }
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+    const { data: suppressedDelivery, error: suppressionError } = await admin
+      .from("outreach_deliveries")
+      .select("id")
+      .ilike("recipient_email", toEmail)
+      .in("status", ["unsubscribed", "bounced"])
+      .limit(1)
+      .maybeSingle();
+    if (suppressionError) return json({ error: "Could not verify recipient suppressions." }, 500);
+    if (suppressedDelivery) {
+      return json({ error: "This recipient has opted out or bounced and cannot be contacted." }, 409);
+    }
     const deliveryMetadata = {
       campaign_name: campaignName,
       prospect_id: payload.prospectId || null,
       contact_name: payload.contactName?.trim() || null,
       branch_name: null,
       sender,
+      reply_to: OUTREACH_EMAIL,
       created_by: userData.user.id,
     };
     const { data: delivery, error: deliveryError } = await admin
@@ -404,32 +431,21 @@ Deno.serve(async (req) => {
     const text = buildBodyText(emailPayload, yesUrl.toString(), noUrl.toString());
     const html = buildHtml(emailPayload, yesUrl.toString(), noUrl.toString());
 
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: sender,
-        to: [toEmail],
-        subject,
-        html,
-        text,
-      }),
-    });
-
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = typeof result === "object" && result && "message" in result ? String((result as { message?: string }).message) : "Resend rejected the email.";
+    let smtpResponse: string;
+    try {
+      smtpResponse = await sendSmtpEmail({ to: toEmail, subject, html, text });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "SMTP rejected the email.";
       await admin.from("outreach_response_tokens").delete().eq("delivery_id", delivery.id);
-      await admin.from("outreach_deliveries").update({ status: "failed" }).eq("id", delivery.id);
-      return json({ error: message }, response.status || 500);
+      await admin
+        .from("outreach_deliveries")
+        .update({ status: "failed", metadata: { ...deliveryMetadata, error: message } })
+        .eq("id", delivery.id);
+      return json({ error: message }, 502);
     }
 
-    const messageId = typeof result === "object" && result && "id" in result ? String((result as { id?: string }).id) : undefined;
     const { error: updateError } = await admin.from("outreach_deliveries").update({
-      provider_message_id: messageId || null,
+      provider_message_id: smtpResponse.slice(0, 500),
       status: "sent",
       sent_at: new Date().toISOString(),
     }).eq("id", delivery.id);
@@ -439,7 +455,7 @@ Deno.serve(async (req) => {
       {
         ok: true,
         status: "sent",
-        messageId,
+        messageId: smtpResponse.slice(0, 500),
         recipient: toEmail,
         subject,
         consentStatus,
