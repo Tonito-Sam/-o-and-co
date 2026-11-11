@@ -5,16 +5,22 @@ import {
   Activity,
   AlertCircle,
   Building2,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
   Globe2,
   LoaderCircle,
+  Mail,
   MapPin,
+  MessageCircle,
+  Phone,
   Play,
   RefreshCw,
   Search,
+  Settings2,
   Signal,
 } from "lucide-react";
-import { PageHeader, StatCard } from "@/components/PageHeader";
+import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +30,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -44,10 +51,22 @@ type CrawlJob = {
   records_seen: number;
   records_created: number;
   records_updated: number;
+  records_skipped: number;
+  activity: { candidates?: CrawlCandidateActivity[] } | null;
   error_summary: string | null;
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
+};
+
+type CrawlCandidateActivity = {
+  provider_id: string;
+  company_name: string;
+  website_domain: string | null;
+  source_url: string;
+  distance_km: number;
+  status: "new" | "created" | "duplicate" | "failed";
+  detail?: string;
 };
 
 type ProspectProfile = {
@@ -55,6 +74,7 @@ type ProspectProfile = {
   website_domain: string | null;
   address: string | null;
   city: string | null;
+  recommended_branch_id: string | null;
 };
 
 type ProspectProfileRelation = ProspectProfile | ProspectProfile[] | null;
@@ -66,7 +86,19 @@ type CapturedSource = {
   page_title: string | null;
   observed_at: string;
   prospect_id: string;
+  metadata: { branch_id?: string; distance_km?: number } | null;
   prospect_profiles: ProspectProfileRelation;
+};
+
+type CrawledAddress = {
+  prospectId: string;
+  companyName: string;
+  websiteDomain: string | null;
+  address: string | null;
+  city: string | null;
+  distanceKm: number | null;
+  sourceUrl: string;
+  observedAt: string;
 };
 
 type CapturedContact = {
@@ -137,6 +169,70 @@ function formatDate(value: string | null) {
   );
 }
 
+const contactIcons = {
+  email: Mail,
+  phone: Phone,
+  social: Globe2,
+  contact_page: ExternalLink,
+  live_chat: MessageCircle,
+} as const;
+
+type ContactKind = keyof typeof contactIcons;
+
+function labelForKind(kind: ContactKind, count: number) {
+  const plural = count === 1 ? "" : "s";
+  const labels: Record<ContactKind, string> = {
+    email: `email${plural}`,
+    phone: `phone${plural}`,
+    social: `social${plural}`,
+    contact_page: `contact page${plural}`,
+    live_chat: `chat${plural}`,
+  };
+  return labels[kind];
+}
+
+function groupContactsByKind(contacts: CapturedContact[]) {
+  return contacts.reduce<Partial<Record<ContactKind, CapturedContact[]>>>(
+    (acc, contact) => {
+      (acc[contact.kind] ??= []).push(contact);
+      return acc;
+    },
+    {},
+  );
+}
+
+function SkeletonList() {
+  return (
+    <div className="space-y-2">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="rounded-lg border bg-card p-4">
+          <div className="h-4 w-40 animate-pulse rounded bg-muted" />
+          <div className="mt-2 h-3 w-64 animate-pulse rounded bg-muted" />
+          <div className="mt-3 h-3 w-32 animate-pulse rounded bg-muted" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-lg border bg-card px-5 py-12 text-center">
+      <div className="mx-auto text-muted-foreground/60">{icon}</div>
+      <h3 className="mt-3 font-medium">{title}</h3>
+      <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/crawler-intelligence")({
   head: () => ({ meta: [{ title: "Crawler Activity — WorkspaceOS" }] }),
   component: CrawlerIntelligence,
@@ -145,7 +241,10 @@ export const Route = createFileRoute("/crawler-intelligence")({
 function CrawlerIntelligence() {
   const { role } = useRole();
   const canView =
-    role.id === "sales-manager" || role.id === "crm-manager" || role.id === "group-ceo" || role.id === "superadmin";
+    role.id === "sales-manager" ||
+    role.id === "crm-manager" ||
+    role.id === "group-ceo" ||
+    role.id === "superadmin";
   const [jobs, setJobs] = useState<CrawlJob[]>([]);
   const [sources, setSources] = useState<CapturedSource[]>([]);
   const [contacts, setContacts] = useState<CapturedContact[]>([]);
@@ -194,14 +293,14 @@ function CrawlerIntelligence() {
           supabase
             .from("prospect_jobs")
             .select(
-              "id,branch_id,connector,status,records_seen,records_created,records_updated,error_summary,started_at,finished_at,created_at",
+              "id,branch_id,connector,status,records_seen,records_created,records_updated,records_skipped,activity,error_summary,started_at,finished_at,created_at",
             )
             .order("created_at", { ascending: false })
             .limit(100),
           supabase
             .from("prospect_sources")
             .select(
-              "id,source_type,source_url,page_title,observed_at,prospect_id,prospect_profiles(company_name,website_domain,address,city)",
+              "id,source_type,source_url,page_title,observed_at,prospect_id,metadata,prospect_profiles(company_name,website_domain,address,city,recommended_branch_id)",
             )
             .order("observed_at", { ascending: false })
             .limit(500),
@@ -230,12 +329,18 @@ function CrawlerIntelligence() {
         targetsResult.error,
       ].find((item) => item !== null);
       if (queryError) {
+        const missingCrawlerTable =
+          queryError.message.includes('relation "public.prospect_') &&
+          queryError.message.includes("does not exist");
+        const missingActivitySchema =
+          queryError.message.includes("records_skipped") ||
+          queryError.message.includes("prospect_crawl_candidates");
         setError(
-          queryError.message.includes("prospect_jobs") ||
-            queryError.message.includes("prospect_sources") ||
-            queryError.message.includes("prospect_contacts")
+          missingCrawlerTable
             ? "Crawler tables are not installed. Apply the Prospect Intelligence migrations first."
-            : queryError.message,
+            : missingActivitySchema
+              ? "Crawler activity schema is out of date. Apply the latest Prospect Intelligence migration."
+              : queryError.message,
         );
       }
       setJobs((jobsResult.data ?? []) as CrawlJob[]);
@@ -321,7 +426,7 @@ function CrawlerIntelligence() {
     const message =
       data.status === "failed"
         ? `Crawl failed: ${data.error ?? "The crawler could not complete."}`
-        : `Crawl ${data.status}: ${data.records_created} new businesses, ${data.records_updated} updated (${data.records_seen} listings checked).${data.error ? ` ${data.error}` : ""}`;
+        : `Crawl ${data.status}: ${data.records_created} new businesses, ${data.records_skipped ?? 0} already seen and skipped (${data.records_seen} listings checked).${data.error ? ` ${data.error}` : ""}`;
     setActionNotice({ kind: data.status === "succeeded" ? "success" : "error", message });
     if (data.status !== "succeeded") toast.error(message);
     else toast.success(message);
@@ -345,6 +450,47 @@ function CrawlerIntelligence() {
       return matchesType && matchesQuery;
     });
   }, [sources, query, sourceType]);
+
+  const crawledAddressesByBranch = useMemo(() => {
+    const addresses = new Map<string, CrawledAddress[]>();
+    const seenProspects = new Set<string>();
+    const normalizedQuery = query.trim().toLowerCase();
+
+    for (const source of sources) {
+      if (source.source_type !== "discovery_provider" || seenProspects.has(source.prospect_id)) {
+        continue;
+      }
+      const profile = getProspectProfile(source.prospect_profiles);
+      const branchId = source.metadata?.branch_id ?? profile?.recommended_branch_id;
+      if (!branchId) continue;
+
+      const address: CrawledAddress = {
+        prospectId: source.prospect_id,
+        companyName: profile?.company_name ?? source.page_title ?? "Unknown business",
+        websiteDomain: profile?.website_domain ?? null,
+        address: profile?.address ?? null,
+        city: profile?.city ?? null,
+        distanceKm: source.metadata?.distance_km ?? null,
+        sourceUrl: source.source_url,
+        observedAt: source.observed_at,
+      };
+      if (
+        normalizedQuery &&
+        ![address.companyName, address.websiteDomain, address.address, address.city].some(
+          (value) => value?.toLowerCase().includes(normalizedQuery),
+        )
+      ) {
+        continue;
+      }
+
+      seenProspects.add(source.prospect_id);
+      const branchAddresses = addresses.get(branchId) ?? [];
+      branchAddresses.push(address);
+      addresses.set(branchId, branchAddresses);
+    }
+
+    return addresses;
+  }, [sources, query]);
 
   const filteredContacts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -405,6 +551,22 @@ function CrawlerIntelligence() {
   const failedJobs = jobs.filter((job) => job.status === "failed").length;
   const recordsSeen = jobs.reduce((sum, job) => sum + job.records_seen, 0);
   const latestJob = jobs.find((job) => job.branch_id === selectedBranchId);
+  const totalBusinesses = useMemo(
+    () => [...crawledAddressesByBranch.values()].reduce((sum, list) => sum + list.length, 0),
+    [crawledAddressesByBranch],
+  );
+  const branchAddressTabs = [
+    {
+      value: "kyalami",
+      label: "Kyalami",
+      branch: branchOptions.find((branch) => branch.name.toLowerCase().includes("kyalami")),
+    },
+    {
+      value: "rosebank",
+      label: "Rosebank",
+      branch: branchOptions.find((branch) => branch.name.toLowerCase().includes("rosebank")),
+    },
+  ];
 
   if (!canView) {
     return (
@@ -439,10 +601,129 @@ function CrawlerIntelligence() {
         }
       />
 
+      {/* ── Compact status bar ─────────────────────────────────────── */}
+      <section className="mb-4 rounded-lg border bg-card">
+        <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+            <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+              <SelectTrigger className="h-9 w-auto min-w-40 gap-1.5">
+                <Building2 className="size-4 text-muted-foreground" />
+                <SelectValue placeholder="Select branch" />
+              </SelectTrigger>
+              <SelectContent>
+                {branchOptions.map((branch) => (
+                  <SelectItem key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <div className="flex min-w-0 items-center gap-2 text-sm">
+              <MapPin className="size-4 shrink-0 text-brand" />
+              {selectedTarget?.enabled ? (
+                <span className="truncate text-muted-foreground">
+                  {selectedTarget.geocode_label ?? selectedTarget.branch_address} ·{" "}
+                  {selectedTarget.radius_km} km
+                </span>
+              ) : (
+                <span className="truncate text-muted-foreground">No search area configured</span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>
+                <strong className="text-foreground">{successfulJobs}</strong> ok
+              </span>
+              <span>
+                <strong className="text-foreground">{recordsSeen}</strong> seen
+              </span>
+              {failedJobs > 0 && (
+                <span className="text-destructive">
+                  <strong>{failedJobs}</strong> failed
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {canConfigure && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <Settings2 className="size-4" />
+                    Configure area
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>Branch search area</DialogTitle>
+                    <DialogDescription>
+                      The crawl is limited to a 30 km radius from this address.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <label htmlFor="branch-address" className="text-xs font-medium">
+                        Exact street address
+                      </label>
+                      <Input
+                        id="branch-address"
+                        value={branchAddress}
+                        onChange={(event) => setBranchAddress(event.target.value)}
+                        placeholder="Street, suburb, city, postal code"
+                        maxLength={300}
+                      />
+                    </div>
+                    {selectedTarget?.geocode_label && (
+                      <p className="text-xs text-muted-foreground">
+                        Map match: {selectedTarget.geocode_label}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button
+                      type="button"
+                      onClick={() => void configureBranch()}
+                      disabled={
+                        actionLoading !== null || !selectedBranchId || !branchAddress.trim()
+                      }
+                    >
+                      {actionLoading === "configure" ? "Saving…" : "Save 30 km area"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            <Button
+              type="button"
+              onClick={() => void runCrawl()}
+              disabled={
+                actionLoading !== null ||
+                !selectedBranchId ||
+                !selectedTarget?.enabled ||
+                selectedTarget.radius_km !== 30
+              }
+              size="sm"
+              className="gap-2"
+            >
+              {actionLoading === "run" ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <Play className="size-4" />
+              )}
+              {actionLoading === "run" ? "Crawling…" : "Start crawl"}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Notices ───────────────────────────────────────────────── */}
       {error && (
         <div
           role="alert"
-          className="mb-5 flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm"
+          className="mb-4 flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0 text-warning" />
           <div>
@@ -455,7 +736,7 @@ function CrawlerIntelligence() {
       {actionNotice && (
         <div
           role={actionNotice.kind === "error" ? "alert" : "status"}
-          className={`mb-5 rounded-md border p-3 text-sm ${
+          className={`mb-4 rounded-md border p-3 text-sm ${
             actionNotice.kind === "error"
               ? "border-destructive/30 bg-destructive/5 text-destructive"
               : "border-success/30 bg-success/5 text-foreground"
@@ -465,343 +746,346 @@ function CrawlerIntelligence() {
         </div>
       )}
 
-      <section className="mb-7 rounded-lg border bg-card p-4 sm:p-5">
-        <div className="mb-4 flex items-start gap-3">
-          <MapPin className="mt-0.5 size-5 shrink-0 text-brand" />
-          <div>
-            <h2 className="font-display text-base font-semibold">Branch search area</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Each crawl is limited to a 30 km radius from the saved branch address.
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-[minmax(12rem,0.8fr)_minmax(16rem,1.5fr)_auto_auto] md:items-end">
-          <div className="space-y-1.5">
-            <label htmlFor="crawl-branch" className="text-xs font-medium">
-              Branch
-            </label>
-            <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-              <SelectTrigger id="crawl-branch">
-                <SelectValue placeholder="Select branch" />
+      {/* ── Main workspace ────────────────────────────────────────── */}
+      <Tabs defaultValue="businesses" className="mt-2">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList aria-label="Crawler workspace" className="flex-wrap">
+            <TabsTrigger value="businesses" className="gap-1.5">
+              <Building2 className="size-3.5" />
+              Businesses
+              <span className="ml-1 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+                {totalBusinesses}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="contacts" className="gap-1.5">
+              <Signal className="size-3.5" />
+              Contacts
+              <span className="ml-1 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+                {contacts.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="sources" className="gap-1.5">
+              <Globe2 className="size-3.5" />
+              Sources
+              <span className="ml-1 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+                {sources.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="runs" className="gap-1.5">
+              <Activity className="size-3.5" />
+              Runs
+              <span className="ml-1 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+                {jobs.length}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative sm:w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Company, address, contact…"
+                className="h-9 pl-8"
+              />
+            </div>
+            <Select value={sourceType} onValueChange={setSourceType}>
+              <SelectTrigger className="h-9 w-full sm:w-44">
+                <SelectValue placeholder="All source types" />
               </SelectTrigger>
               <SelectContent>
-                {branchOptions.map((branch) => (
-                  <SelectItem key={branch.id} value={branch.id}>
-                    {branch.name}
+                <SelectItem value="all">All source types</SelectItem>
+                {Object.entries(sourceLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          {canConfigure ? (
-            <div className="space-y-1.5">
-              <label htmlFor="branch-address" className="text-xs font-medium">
-                Exact street address
-              </label>
-              <Input
-                id="branch-address"
-                value={branchAddress}
-                onChange={(event) => setBranchAddress(event.target.value)}
-                placeholder="Street, suburb, city, postal code"
-                maxLength={300}
-              />
-            </div>
-          ) : (
-            <div className="min-w-0 text-sm">
-              <p className="text-xs font-medium">Saved location</p>
-              {selectedTarget?.branch_address ? (
-                <>
-                  <p className="mt-1 truncate font-medium">{selectedTarget.branch_address}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    Map match: {selectedTarget.geocode_label}
-                  </p>
-                </>
-              ) : (
-                <p className="mt-1 truncate text-muted-foreground">
-                  Not configured by a platform executive
-                </p>
-              )}
-            </div>
-          )}
-          {canConfigure && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void configureBranch()}
-              disabled={actionLoading !== null || !selectedBranchId || !branchAddress.trim()}
-            >
-              {actionLoading === "configure" ? "Saving…" : "Save 30 km area"}
-            </Button>
-          )}
-          <Button
-            type="button"
-            onClick={() => void runCrawl()}
-            disabled={
-              actionLoading !== null ||
-              !selectedBranchId ||
-              !selectedTarget?.enabled ||
-              selectedTarget.radius_km !== 30
-            }
-            className="gap-2"
-          >
-            {actionLoading === "run" ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <Play className="size-4" />
-            )}
-            {actionLoading === "run" ? "Crawling…" : "Start crawl"}
-          </Button>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          {selectedTarget?.enabled ? (
-            <>
-              Search center: {selectedTarget.geocode_label ?? selectedTarget.branch_address} · 30 km
-            </>
-          ) : canConfigure ? (
-            "Save the branch's exact address to enable crawling. The matched map location will be shown here."
-          ) : (
-            "A platform executive must save this branch's exact address before it can be crawled."
-          )}
-        </p>
-      </section>
 
-      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-        <div className="relative sm:w-72">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Company, contact, page, domain…"
-            className="pl-8"
-          />
-        </div>
-        <Select value={sourceType} onValueChange={setSourceType}>
-          <SelectTrigger className="w-full sm:w-48">
-            <SelectValue placeholder="All source types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All source types</SelectItem>
-            {Object.entries(sourceLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label="Recorded runs"
-          value={String(jobs.length)}
-          hint="Discovery job history"
-          accent="brand"
-        />
-        <StatCard
-          label="Successful or partial"
-          value={String(successfulJobs)}
-          hint="Runs with results"
-          accent="success"
-        />
-        <StatCard label="Records seen" value={String(recordsSeen)} hint="Reported by connectors" />
-        <StatCard
-          label="Failed runs"
-          value={String(failedJobs)}
-          hint="Require investigation"
-          accent={failedJobs ? "warning" : undefined}
-        />
-      </div>
-
-      <section className="mb-8">
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div>
-            <h2 className="font-display text-lg font-semibold">Latest discovery run</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Newest run for the selected branch. Earlier attempts remain recorded but are hidden
-              here.
-            </p>
-          </div>
-        </div>
-        <div className="overflow-x-auto rounded-lg border bg-card">
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-              Loading latest run…
-            </div>
-          ) : !latestJob ? (
-            <div className="px-5 py-12 text-center">
-              <Activity className="mx-auto size-8 text-muted-foreground/60" />
-              <h3 className="mt-3 font-medium">No discovery run recorded</h3>
-              <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
-                This page will list connector runs after a discovery job is configured and executed.
-                It does not indicate that a crawler is currently running.
-              </p>
-            </div>
-          ) : (
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Branch</th>
-                  <th className="px-4 py-3 font-medium">Connector</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Started</th>
-                  <th className="px-4 py-3 text-right font-medium">Seen</th>
-                  <th className="px-4 py-3 text-right font-medium">New</th>
-                  <th className="px-4 py-3 text-right font-medium">Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="px-4 py-3 font-medium">
-                    {branches.get(latestJob.branch_id ?? "") ?? "All branches"}
-                  </td>
-                  <td className="px-4 py-3">{latestJob.connector}</td>
-                  <td className="max-w-sm px-4 py-3">
-                    <Badge
-                      variant={
-                        latestJob.status === "succeeded"
-                          ? "default"
-                          : latestJob.status === "failed"
-                            ? "destructive"
-                            : "outline"
-                      }
-                    >
-                      {latestJob.status}
-                    </Badge>
-                    {latestJob.error_summary && (
-                      <p className="mt-1 text-xs text-destructive">{latestJob.error_summary}</p>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+        {/* ── BUSINESSES ───────────────────────────────────────────── */}
+        <TabsContent value="businesses" className="mt-0">
+          {latestJob && (
+            <details className="group mb-4 rounded-lg border bg-card">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Badge
+                    variant={
+                      latestJob.status === "succeeded"
+                        ? "default"
+                        : latestJob.status === "failed"
+                          ? "destructive"
+                          : "outline"
+                    }
+                  >
+                    {latestJob.status}
+                  </Badge>
+                  <span className="truncate text-sm">
+                    {latestJob.records_created} new · {latestJob.records_skipped} seen ·{" "}
+                    {latestJob.records_seen} checked
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  <span className="hidden sm:inline">
                     {formatDate(latestJob.started_at ?? latestJob.created_at)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">{latestJob.records_seen}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{latestJob.records_created}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{latestJob.records_updated}</td>
-                </tr>
-              </tbody>
-            </table>
+                  </span>
+                  <ChevronDown className="size-4 transition-transform group-open:rotate-180" />
+                </div>
+              </summary>
+              <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+                {latestJob.error_summary ? (
+                  <p className="text-destructive">{latestJob.error_summary}</p>
+                ) : (
+                  <p>
+                    Connector <strong>{latestJob.connector}</strong> · started{" "}
+                    {formatDate(latestJob.started_at ?? latestJob.created_at)}
+                    {latestJob.finished_at ? ` · finished ${formatDate(latestJob.finished_at)}` : ""}
+                  </p>
+                )}
+              </div>
+            </details>
           )}
-        </div>
-      </section>
 
-      <Tabs defaultValue="contacts" className="mt-6">
-        <TabsList aria-label="Crawler details" className="h-auto flex-wrap justify-start">
-          <TabsTrigger value="contacts" className="gap-1.5">
-            <Signal className="size-3.5" />Business contacts ({contacts.length})
-          </TabsTrigger>
-          <TabsTrigger value="sources" className="gap-1.5">
-            <Globe2 className="size-3.5" />Website evidence ({sources.length})
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="contacts">
-        <div className="mb-3">
-          <h2 className="font-display text-lg font-semibold">Captured business contacts</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Public contact details linked to discovered companies and their source records.
-          </p>
-        </div>
-        <div className="overflow-hidden rounded-lg border bg-card">
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-              Loading captured contacts…
-            </div>
-          ) : filteredContacts.length === 0 ? (
-            <div className="px-5 py-12 text-center">
-              <Signal className="mx-auto size-8 text-muted-foreground/60" />
-              <h3 className="mt-3 font-medium">
-                {contacts.length ? "No contacts match" : "No business contacts captured yet"}
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Public emails, phone numbers, and contact links appear here when a discovery
-                connector stores them.
-              </p>
-            </div>
+            <SkeletonList />
+          ) : crawledAddressesByBranch.size === 0 ? (
+            <EmptyState
+              icon={<Building2 className="size-8" />}
+              title="No businesses crawled yet"
+              description="Start a crawl to discover businesses within 30 km of a branch."
+            />
           ) : (
-            <div className="divide-y">
-              {groupedContacts.map((group) => (
-                <article
-                  key={`${group.companyName}-${group.city ?? "unknown"}`}
-                  className="grid gap-4 p-4 md:grid-cols-[minmax(14rem,0.8fr)_minmax(0,1.2fr)] md:items-center"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCompanyDetails(group)}
-                        className="cursor-pointer text-left text-sm font-semibold text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {group.companyName}
-                      </button>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {group.websiteDomain ?? "Website not captured"}
-                      {group.city ? ` · ${group.city}` : ""}
-                    </p>
-                    {group.address && (
-                      <p className="mt-1 text-xs text-muted-foreground">{group.address}</p>
+            <Tabs defaultValue={branchAddressTabs[0]?.value ?? "kyalami"}>
+              <TabsList className="mb-3 grid w-full grid-cols-2 sm:w-fit">
+                {branchAddressTabs.map((tab) => (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    {tab.label}
+                    <span className="ml-1.5 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+                      {tab.branch ? (crawledAddressesByBranch.get(tab.branch.id) ?? []).length : 0}
+                    </span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              {branchAddressTabs.map((tab) => {
+                const addresses = tab.branch
+                  ? crawledAddressesByBranch.get(tab.branch.id) ?? []
+                  : [];
+                return (
+                  <TabsContent key={tab.value} value={tab.value} className="mt-0">
+                    {!tab.branch ? (
+                      <p className="rounded-lg border bg-card px-5 py-8 text-sm text-muted-foreground">
+                        The {tab.label} branch is not configured as a live branch.
+                      </p>
+                    ) : addresses.length === 0 ? (
+                      <p className="rounded-lg border bg-card px-5 py-8 text-sm text-muted-foreground">
+                        {query.trim()
+                          ? `No ${tab.label} businesses match your search.`
+                          : `No businesses recorded for ${tab.label} yet.`}
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {addresses.map((address) => {
+                          const companyContacts = filteredContacts.filter(
+                            (c) => c.prospect_id === address.prospectId,
+                          );
+                          const contactsByKind = groupContactsByKind(companyContacts);
+                          return (
+                            <article
+                              key={address.prospectId}
+                              className="rounded-lg border bg-card p-4 transition-colors hover:border-brand/40"
+                            >
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-sm font-semibold">
+                                      {address.companyName}
+                                    </h3>
+                                    {address.distanceKm !== null && (
+                                      <Badge variant="outline" className="gap-1">
+                                        <MapPin className="size-3" />
+                                        {address.distanceKm} km
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="mt-1 text-sm text-muted-foreground">
+                                    {address.address ?? "Address not listed"}
+                                    {address.city ? ` · ${address.city}` : ""}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    {address.websiteDomain ?? "No website"} · crawled{" "}
+                                    {formatDate(address.observedAt)}
+                                  </p>
+                                </div>
+                                <Button
+                                  asChild
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-fit shrink-0"
+                                >
+                                  <a
+                                    href={address.sourceUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    Listing <ExternalLink className="ml-1 size-3.5" />
+                                  </a>
+                                </Button>
+                              </div>
+
+                              {companyContacts.length > 0 && (
+                                <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
+                                  {(
+                                    [
+                                      "email",
+                                      "phone",
+                                      "social",
+                                      "contact_page",
+                                      "live_chat",
+                                    ] as const
+                                  ).map((kind) => {
+                                    const items = contactsByKind[kind];
+                                    if (!items?.length) return null;
+                                    const Icon = contactIcons[kind];
+                                    return (
+                                      <button
+                                        key={kind}
+                                        type="button"
+                                        onClick={() =>
+                                          setSelectedCompanyDetails({
+                                            companyName: address.companyName,
+                                            address: address.address,
+                                            city: address.city,
+                                            websiteDomain: address.websiteDomain,
+                                            contacts: companyContacts,
+                                          })
+                                        }
+                                        className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand"
+                                      >
+                                        <Icon className="size-3" />
+                                        {items.length} {labelForKind(kind, items.length)}
+                                      </button>
+                                    );
+                                  })}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedCompanyDetails({
+                                        companyName: address.companyName,
+                                        address: address.address,
+                                        city: address.city,
+                                        websiteDomain: address.websiteDomain,
+                                        contacts: companyContacts,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 rounded-full border border-brand/30 px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand/5"
+                                  >
+                                    View all contacts
+                                    <ChevronRight className="size-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </article>
+                          );
+                        })}
+                      </div>
                     )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-                    {(["email", "phone", "social", "contact_page"] as const).map((kind) => {
-                      const count = group.contacts.filter((contact) => contact.kind === kind).length;
-                      if (!count) return null;
-                      const label = kind === "contact_page" ? "Contact pages" : `${kind}s`;
-                      return (
-                        <div key={kind} className="rounded-md border bg-muted/20 px-3 py-2">
-                          <p className="font-medium capitalize">{label}</p>
-                          <p className="mt-1 text-muted-foreground">{count} captured</p>
-                        </div>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => setSelectedCompanyDetails(group)}
-                      className="rounded-md border border-brand/30 px-3 py-2 text-left font-medium text-brand hover:bg-brand/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      View all {group.contacts.length} contacts
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
+                  </TabsContent>
+                );
+              })}
+            </Tabs>
           )}
-        </div>
         </TabsContent>
 
-        <TabsContent value="sources">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="font-display text-lg font-semibold">Captured website evidence</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              OpenStreetMap data is under ODbL, and website crawling respects robots.txt.
-            </p>
-          </div>
-        </div>
-        <div className="overflow-hidden rounded-lg border bg-card">
+        {/* ── CONTACTS ─────────────────────────────────────────────── */}
+        <TabsContent value="contacts" className="mt-0">
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-              <LoaderCircle className="size-4 animate-spin" />
-              Loading captured evidence…
-            </div>
-          ) : filteredSources.length === 0 ? (
-            <div className="px-5 py-12 text-center">
-              <Globe2 className="mx-auto size-8 text-muted-foreground/60" />
-              <h3 className="mt-3 font-medium">
-                {sources.length ? "No captured pages match" : "No website evidence captured yet"}
-              </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Captured pages appear here when connectors store them in the prospect source
-                timeline.
-              </p>
-            </div>
+            <SkeletonList />
+          ) : groupedContacts.length === 0 ? (
+            <EmptyState
+              icon={<Signal className="size-8" />}
+              title={contacts.length ? "No contacts match your search" : "No contacts captured yet"}
+              description="Public emails, phone numbers, and contact links appear here when a discovery connector stores them."
+            />
           ) : (
-            <div className="divide-y">
+            <div className="space-y-2">
+              {groupedContacts.map((group) => {
+                const byKind = groupContactsByKind(group.contacts);
+                return (
+                  <article
+                    key={`${group.companyName}-${group.city ?? "unknown"}`}
+                    className="rounded-lg border bg-card p-4"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCompanyDetails(group)}
+                          className="text-left text-sm font-semibold text-brand hover:underline"
+                        >
+                          {group.companyName}
+                        </button>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {group.websiteDomain ?? "Website not captured"}
+                          {group.city ? ` · ${group.city}` : ""}
+                        </p>
+                        {group.address && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">{group.address}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(["email", "phone", "social", "contact_page"] as const).map((kind) => {
+                          const items = byKind[kind];
+                          if (!items?.length) return null;
+                          const Icon = contactIcons[kind];
+                          return (
+                            <span
+                              key={kind}
+                              className="inline-flex items-center gap-1 rounded-full border bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground"
+                            >
+                              <Icon className="size-3" />
+                              {items.length} {labelForKind(kind, items.length)}
+                            </span>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCompanyDetails(group)}
+                          className="inline-flex items-center gap-1 rounded-full border border-brand/30 px-2.5 py-1 text-xs font-medium text-brand hover:bg-brand/5"
+                        >
+                          View all
+                          <ChevronRight className="size-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ── SOURCES ──────────────────────────────────────────────── */}
+        <TabsContent value="sources" className="mt-0">
+          <p className="mb-3 text-xs text-muted-foreground">
+            OpenStreetMap data is under ODbL, and website crawling respects robots.txt.
+          </p>
+          {loading ? (
+            <SkeletonList />
+          ) : filteredSources.length === 0 ? (
+            <EmptyState
+              icon={<Globe2 className="size-8" />}
+              title={sources.length ? "No pages match" : "No sources captured yet"}
+              description="Captured pages appear here when connectors store them in the prospect source timeline."
+            />
+          ) : (
+            <div className="divide-y overflow-hidden rounded-lg border bg-card">
               {filteredSources.map((source) => (
                 <article
                   key={source.id}
-                  className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4"
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -814,12 +1098,9 @@ function CrawlerIntelligence() {
                         {sourceLabels[source.source_type] ?? source.source_type}
                       </Badge>
                     </div>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
                       {getProspectProfile(source.prospect_profiles)?.company_name ??
                         "Unknown company"}
-                      {getProspectProfile(source.prospect_profiles)?.website_domain
-                        ? ` · ${getProspectProfile(source.prospect_profiles)?.website_domain}`
-                        : ""}
                       {getProspectProfile(source.prospect_profiles)?.city
                         ? ` · ${getProspectProfile(source.prospect_profiles)?.city}`
                         : ""}{" "}
@@ -828,18 +1109,83 @@ function CrawlerIntelligence() {
                   </div>
                   <Button asChild variant="ghost" size="sm" className="w-fit shrink-0">
                     <a href={source.source_url} target="_blank" rel="noreferrer">
-                      Open source <ExternalLink className="ml-1 size-3.5" />
+                      Open <ExternalLink className="ml-1 size-3.5" />
                     </a>
                   </Button>
                 </article>
               ))}
             </div>
           )}
-        </div>
+        </TabsContent>
+
+        {/* ── RUNS ─────────────────────────────────────────────────── */}
+        <TabsContent value="runs" className="mt-0">
+          {loading ? (
+            <SkeletonList />
+          ) : jobs.length === 0 ? (
+            <EmptyState
+              icon={<Activity className="size-8" />}
+              title="No runs recorded"
+              description="This page lists connector runs after a discovery job is executed."
+            />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border bg-card">
+              <table className="w-full min-w-175 text-left text-sm">
+                <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2.5 font-medium">Branch</th>
+                    <th className="px-4 py-2.5 font-medium">Connector</th>
+                    <th className="px-4 py-2.5 font-medium">Status</th>
+                    <th className="px-4 py-2.5 font-medium">Started</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Seen</th>
+                    <th className="px-4 py-2.5 text-right font-medium">New</th>
+                    <th className="px-4 py-2.5 text-right font-medium">Skipped</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {jobs.map((job) => (
+                    <tr key={job.id} className="hover:bg-muted/20">
+                      <td className="px-4 py-2.5 font-medium">
+                        {branches.get(job.branch_id ?? "") ?? "All branches"}
+                      </td>
+                      <td className="px-4 py-2.5">{job.connector}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge
+                          variant={
+                            job.status === "succeeded"
+                              ? "default"
+                              : job.status === "failed"
+                                ? "destructive"
+                                : "outline"
+                          }
+                        >
+                          {job.status}
+                        </Badge>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-xs text-muted-foreground">
+                        {formatDate(job.started_at ?? job.created_at)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{job.records_seen}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">
+                        {job.records_created}
+                      </td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">
+                        {job.records_skipped}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
-      <Dialog open={selectedCompanyDetails !== null} onOpenChange={(open) => !open && setSelectedCompanyDetails(null)}>
+      {/* ── Company details dialog ─────────────────────────────────── */}
+      <Dialog
+        open={selectedCompanyDetails !== null}
+        onOpenChange={(open) => !open && setSelectedCompanyDetails(null)}
+      >
         <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
           {selectedCompanyDetails && (
             <>
@@ -867,11 +1213,12 @@ function CrawlerIntelligence() {
                     (contact) => contact.kind === kind,
                   );
                   if (!matchingContacts.length) return null;
-                  const heading = kind === "contact_page"
-                    ? "Contact pages"
-                    : kind === "live_chat"
-                      ? "Live chat"
-                      : `${kind}s`;
+                  const heading =
+                    kind === "contact_page"
+                      ? "Contact pages"
+                      : kind === "live_chat"
+                        ? "Live chat"
+                        : `${kind}s`;
                   return (
                     <section key={kind}>
                       <h3 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">

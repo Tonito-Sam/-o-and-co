@@ -29,6 +29,15 @@ type CrawledContact = {
   value: string;
   sourceUrl: string;
 };
+type CandidateActivity = {
+  provider_id: string;
+  company_name: string;
+  website_domain: string | null;
+  source_url: string;
+  distance_km: number;
+  status: "new" | "created" | "duplicate" | "failed";
+  detail?: string;
+};
 
 const robotsCache = new Map<string, string>();
 
@@ -73,6 +82,13 @@ function websiteDetails(value?: string) {
   } catch {
     return { url: null, domain: null };
   }
+}
+
+function discoverySourceUrl(element: Element, name: string) {
+  return (
+    element.sourceUrl ??
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}&query_place_id=${encodeURIComponent(String(element.id))}`
+  );
 }
 
 function decodeHtml(value: string) {
@@ -589,6 +605,8 @@ Deno.serve(async (request) => {
     let recordsSeen = 0;
     let recordsCreated = 0;
     let recordsUpdated = 0;
+    let recordsSkipped = 0;
+    const activity: CandidateActivity[] = [];
     const errors: string[] = [];
     try {
       if (!googlePlacesKey) throw new Error("Google Places is not configured on the crawler function.");
@@ -598,7 +616,19 @@ Deno.serve(async (request) => {
       }
       recordsSeen = elements.length;
 
-      const websiteContactsByUrl = await crawlBusinessWebsites(elements);
+      const candidates: Array<{
+        element: Element;
+        tags: Record<string, string>;
+        name: string;
+        latitude: number;
+        longitude: number;
+        distance: number;
+        website: ReturnType<typeof websiteDetails>;
+        city: string | null;
+        normalizedName: string;
+        sourceUrl: string;
+        activity: CandidateActivity;
+      }> = [];
       for (const element of elements.slice(0, 30)) {
         const tags = element.tags ?? {};
         const name = tags.name?.trim();
@@ -606,73 +636,175 @@ Deno.serve(async (request) => {
         if (!name || typeof position.lat !== "number" || typeof position.lon !== "number") continue;
         const distance = distanceKm(latitude, longitude, position.lat, position.lon);
         if (distance > 30) continue;
+        const website = websiteDetails(tags["contact:website"] ?? tags.website);
+        const city = tags["addr:city"] ?? branch.city;
+        const normalizedName = name
+          .normalize("NFKD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, " ")
+          .trim();
+        candidates.push({
+          element,
+          tags,
+          name,
+          latitude: position.lat,
+          longitude: position.lon,
+          distance,
+          website,
+          city,
+          normalizedName,
+          sourceUrl: discoverySourceUrl(element, name),
+          activity: {
+            provider_id: String(element.id),
+            company_name: name,
+            website_domain: website.domain,
+            source_url: discoverySourceUrl(element, name),
+            distance_km: Number(distance.toFixed(2)),
+            status: "new",
+          },
+        });
+      }
 
-        try {
-          const website = websiteDetails(tags["contact:website"] ?? tags.website);
-          const city = tags["addr:city"] ?? branch.city;
-          const normalizedName = name
-            .normalize("NFKD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, " ")
-            .trim();
+      const knownSourceUrls = new Set<string>();
+      const discoverySourceUrls = [...new Set(candidates.map(({ sourceUrl }) => sourceUrl))];
+      if (discoverySourceUrls.length) {
+        const { data: knownSources, error: knownSourcesError } = await admin
+          .from("prospect_sources")
+          .select("source_url")
+          .eq("source_type", "discovery_provider")
+          .in("source_url", discoverySourceUrls);
+        if (knownSourcesError) throw knownSourcesError;
+        for (const source of knownSources ?? []) knownSourceUrls.add(source.source_url);
+      }
+
+      const newCandidates: typeof candidates = [];
+      const seenCompanyKeys = new Set<string>();
+      const seenDomains = new Set<string>();
+      for (const candidate of candidates) {
+        const companyKey = `${candidate.normalizedName}|${candidate.city?.trim().toLowerCase() ?? ""}`;
+        let isDuplicate = knownSourceUrls.has(candidate.sourceUrl);
+        let duplicateDetail = "This provider listing was recorded before; its website was not crawled.";
+        if (
+          !isDuplicate &&
+          (seenCompanyKeys.has(companyKey) ||
+            Boolean(candidate.website.domain && seenDomains.has(candidate.website.domain)))
+        ) {
+          isDuplicate = true;
+          duplicateDetail = "This business appeared more than once in this run; the duplicate listing was skipped.";
+        }
+        if (!isDuplicate) {
           let existingQuery = admin
             .from("prospect_profiles")
-            .select("id,website_url,website_domain,address,city,region,recommended_branch_id")
-            .eq("normalized_name", normalizedName)
+            .select("id")
+            .eq("normalized_name", candidate.normalizedName)
             .limit(1);
-          existingQuery = city ? existingQuery.eq("city", city) : existingQuery.is("city", null);
-          let { data: existing } = await existingQuery.maybeSingle();
-          if (!existing && website.domain) {
-            const domainResult = await admin
+          existingQuery = candidate.city
+            ? existingQuery.eq("city", candidate.city)
+            : existingQuery.is("city", null);
+          const { data: existingByName, error: nameLookupError } = await existingQuery.maybeSingle();
+          if (nameLookupError) throw nameLookupError;
+          isDuplicate = Boolean(existingByName);
+
+          if (!isDuplicate && candidate.website.domain) {
+            const { data: existingByDomain, error: domainLookupError } = await admin
               .from("prospect_profiles")
               .select("id")
-              .eq("website_domain", website.domain)
+              .eq("website_domain", candidate.website.domain)
               .limit(1)
               .maybeSingle();
-            existing = domainResult.data;
+            if (domainLookupError) throw domainLookupError;
+            isDuplicate = Boolean(existingByDomain);
           }
+          duplicateDetail = "A matching business is already in prospect records; its website was not crawled.";
+        }
+        seenCompanyKeys.add(companyKey);
+        if (candidate.website.domain) seenDomains.add(candidate.website.domain);
 
+        if (isDuplicate) {
+          candidate.activity.status = "duplicate";
+          candidate.activity.detail = duplicateDetail;
+          activity.push(candidate.activity);
+          recordsSkipped += 1;
+          continue;
+        }
+
+        activity.push(candidate.activity);
+        newCandidates.push(candidate);
+      }
+
+      const claimedCandidates: typeof candidates = [];
+      for (const candidate of newCandidates) {
+        const { data: claim, error: claimError } = await admin
+          .from("prospect_crawl_candidates")
+          .insert({
+            provider_id: candidate.activity.provider_id,
+            company_key: `${candidate.normalizedName}|${candidate.city?.trim().toLowerCase() ?? ""}`,
+            website_domain: candidate.website.domain,
+            job_id: job.id,
+            branch_id: branchId,
+            company_name: candidate.name,
+            source_url: candidate.sourceUrl,
+          })
+          .select("provider_id")
+          .maybeSingle();
+        if (claimError?.code === "23505") {
+          candidate.activity.status = "duplicate";
+          candidate.activity.detail = "Another crawl already claimed this listing; its website was not crawled.";
+          recordsSkipped += 1;
+          continue;
+        }
+        if (claimError) throw claimError;
+        if (!claim) throw new Error("Could not claim this listing for crawling.");
+        claimedCandidates.push(candidate);
+      }
+
+      const websiteContactsByUrl = await crawlBusinessWebsites(
+        claimedCandidates.map(({ element }) => element),
+      );
+      for (const candidate of claimedCandidates) {
+        const {
+          element,
+          tags,
+          name,
+          latitude: prospectLatitude,
+          longitude: prospectLongitude,
+          distance,
+          website,
+          city,
+          sourceUrl,
+          activity: candidateActivity,
+        } = candidate;
+
+        try {
           const listedAddress =
             [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ") || null;
           const profile = {
             company_name: name,
-            normalized_name: normalizedName,
-            website_url: website.url ?? existing?.website_url ?? null,
-            website_domain: website.domain ?? existing?.website_domain ?? null,
-            address: tags["addr:full"] ?? listedAddress ?? existing?.address ?? null,
-            city: city ?? existing?.city ?? null,
-            region: branch.region ?? existing?.region ?? null,
+            normalized_name: candidate.normalizedName,
+            website_url: website.url,
+            website_domain: website.domain,
+            address: tags["addr:full"] ?? listedAddress,
+            city,
+            region: branch.region,
             country: "South Africa",
-            latitude: position.lat,
-            longitude: position.lon,
-            recommended_branch_id: existing?.recommended_branch_id ?? branchId,
+            latitude: prospectLatitude,
+            longitude: prospectLongitude,
+            recommended_branch_id: branchId,
             last_crawled_at: new Date().toISOString(),
           };
-          let prospectId: string;
-          if (existing) {
-            const { error } = await admin
-              .from("prospect_profiles")
-              .update(profile)
-              .eq("id", existing.id);
-            if (error) throw error;
-            prospectId = existing.id;
-            recordsUpdated += 1;
-          } else {
-            const { data: inserted, error } = await admin
-              .from("prospect_profiles")
-              .insert({ ...profile, discovery_status: "discovered" })
-              .select("id")
-              .single();
-            if (error || !inserted) throw error ?? new Error("Could not save prospect profile.");
-            prospectId = inserted.id;
-            recordsCreated += 1;
+          const { data: inserted, error: insertError } = await admin
+            .from("prospect_profiles")
+            .insert({ ...profile, discovery_status: "discovered" })
+            .select("id")
+            .single();
+          if (insertError || !inserted) {
+            throw insertError ?? new Error("Could not save prospect profile.");
           }
+          const prospectId = inserted.id;
+          recordsCreated += 1;
 
           const provider = element.provider ?? "Google Places";
-          const sourceUrl =
-            element.sourceUrl ??
-            `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
           const { data: source, error: sourceError } = await admin
             .from("prospect_sources")
             .upsert(
@@ -757,9 +889,24 @@ Deno.serve(async (request) => {
               .upsert(contacts, { onConflict: "prospect_id,kind,value" });
             if (error) throw error;
           }
+          const { error: claimUpdateError } = await admin
+            .from("prospect_crawl_candidates")
+            .update({ status: "created", prospect_id: prospectId, finished_at: new Date().toISOString() })
+            .eq("provider_id", candidateActivity.provider_id)
+            .eq("job_id", job.id);
+          if (claimUpdateError) throw claimUpdateError;
+          candidateActivity.status = "created";
+          candidateActivity.detail = `New prospect saved; ${contacts.length} public contact detail(s) captured.`;
         } catch (error) {
-          errors.push(error instanceof Error ? error.message : "Could not save one business listing.");
-          if (errors.length >= 5) break;
+          const message = error instanceof Error ? error.message : "Could not save one business listing.";
+          await admin
+            .from("prospect_crawl_candidates")
+            .update({ status: "failed", error_summary: message.slice(0, 500), finished_at: new Date().toISOString() })
+            .eq("provider_id", candidateActivity.provider_id)
+            .eq("job_id", job.id);
+          candidateActivity.status = "failed";
+          candidateActivity.detail = message;
+          errors.push(message);
         }
       }
 
@@ -771,6 +918,8 @@ Deno.serve(async (request) => {
           records_seen: recordsSeen,
           records_created: recordsCreated,
           records_updated: recordsUpdated,
+          records_skipped: recordsSkipped,
+          activity: { candidates: activity },
           error_summary: errors.length ? errors.join("; ").slice(0, 1000) : null,
           finished_at: new Date().toISOString(),
         })
@@ -781,14 +930,32 @@ Deno.serve(async (request) => {
         records_seen: recordsSeen,
         records_created: recordsCreated,
         records_updated: recordsUpdated,
+        records_skipped: recordsSkipped,
+        activity: { candidates: activity },
         error: errors.length ? errors.join("; ").slice(0, 1000) : null,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Crawler job failed.";
       await admin
+        .from("prospect_crawl_candidates")
+        .update({ status: "failed", error_summary: message.slice(0, 500), finished_at: new Date().toISOString() })
+        .eq("job_id", job.id)
+        .eq("status", "claimed");
+      for (const candidate of activity) {
+        if (candidate.status === "new") {
+          candidate.status = "failed";
+          candidate.detail = message;
+        }
+      }
+      await admin
         .from("prospect_jobs")
         .update({
           status: "failed",
+          records_seen: recordsSeen,
+          records_created: recordsCreated,
+          records_updated: recordsUpdated,
+          records_skipped: recordsSkipped,
+          activity: { candidates: activity },
           error_summary: message.slice(0, 1000),
           finished_at: new Date().toISOString(),
         })
@@ -799,6 +966,8 @@ Deno.serve(async (request) => {
         records_seen: recordsSeen,
         records_created: recordsCreated,
         records_updated: recordsUpdated,
+        records_skipped: recordsSkipped,
+        activity: { candidates: activity },
         error: message,
       });
     }
