@@ -9,185 +9,54 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WelcomeRouteImport } from './routes/welcome'
-import { Route as UnionStationAdminRouteImport } from './routes/union-station-admin'
-import { Route as UnionStationRouteImport } from './routes/union-station'
-import { Route as TourRequestRouteImport } from './routes/tour-request'
-import { Route as TourCalendarRouteImport } from './routes/tour-calendar'
-import { Route as TenantsRouteImport } from './routes/tenants'
-import { Route as TenantAccessRouteImport } from './routes/tenant-access'
-import { Route as SupportRouteImport } from './routes/support'
-import { Route as StaffRouteImport } from './routes/staff'
-import { Route as OutreachRouteImport } from './routes/outreach'
-import { Route as OrganizationRouteImport } from './routes/organization'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as NotificationsRouteImport } from './routes/notifications'
-import { Route as MessagingRouteImport } from './routes/messaging'
-import { Route as MarketplaceRouteImport } from './routes/marketplace'
-import { Route as LeadsIntelligenceRouteImport } from './routes/leads-intelligence'
-import { Route as FacilitiesRouteImport } from './routes/facilities'
-import { Route as EventsRouteImport } from './routes/events'
-import { Route as CrmRouteImport } from './routes/crm'
-import { Route as CrawlerIntelligenceRouteImport } from './routes/crawler-intelligence'
-import { Route as ContentRouteImport } from './routes/content'
-import { Route as CommunityRouteImport } from './routes/community'
-import { Route as CafeRouteImport } from './routes/cafe'
-import { Route as BookingsRouteImport } from './routes/bookings'
-import { Route as BillingRouteImport } from './routes/billing'
-import { Route as AuditRouteImport } from './routes/audit'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
-import { Route as AiAssistantRouteImport } from './routes/ai-assistant'
-import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SettingsRolesRouteImport } from './routes/settings.roles'
-import { Route as ContentManageRouteImport } from './routes/content.manage'
-import { Route as CheckinCodeRouteImport } from './routes/checkin.$code'
-import { Route as AuthVerifyEmailRouteImport } from './routes/auth.verify-email'
-import { Route as AuthSsoRouteImport } from './routes/auth.sso'
-import { Route as AuthSignUpRouteImport } from './routes/auth.sign-up'
-import { Route as AuthSignInRouteImport } from './routes/auth.sign-in'
-import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
-import { Route as AuthMfaRouteImport } from './routes/auth.mfa'
+import { Route as AccountRouteImport } from './routes/account'
+import { Route as AiAssistantRouteImport } from './routes/ai-assistant'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AuditRouteImport } from './routes/audit'
+import { Route as BillingRouteImport } from './routes/billing'
+import { Route as BookingsRouteImport } from './routes/bookings'
+import { Route as CafeRouteImport } from './routes/cafe'
+import { Route as CommunityRouteImport } from './routes/community'
+import { Route as ContentRouteImport } from './routes/content'
+import { Route as CrawlerIntelligenceRouteImport } from './routes/crawler-intelligence'
+import { Route as CrmRouteImport } from './routes/crm'
+import { Route as EventsRouteImport } from './routes/events'
+import { Route as FacilitiesRouteImport } from './routes/facilities'
+import { Route as LeadsIntelligenceRouteImport } from './routes/leads-intelligence'
+import { Route as MarketplaceRouteImport } from './routes/marketplace'
+import { Route as MessagingRouteImport } from './routes/messaging'
+import { Route as NotificationsRouteImport } from './routes/notifications'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as OrganizationRouteImport } from './routes/organization'
+import { Route as OutreachRouteImport } from './routes/outreach'
+import { Route as StaffRouteImport } from './routes/staff'
+import { Route as SupportRouteImport } from './routes/support'
+import { Route as TenantAccessRouteImport } from './routes/tenant-access'
+import { Route as TenantsRouteImport } from './routes/tenants'
+import { Route as TourCalendarRouteImport } from './routes/tour-calendar'
+import { Route as TourRequestRouteImport } from './routes/tour-request'
+import { Route as UnionStationRouteImport } from './routes/union-station'
+import { Route as UnionStationAdminRouteImport } from './routes/union-station-admin'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as AuthForgotPasswordRouteImport } from './routes/auth.forgot-password'
+import { Route as AuthMfaRouteImport } from './routes/auth.mfa'
+import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
+import { Route as AuthSignInRouteImport } from './routes/auth.sign-in'
+import { Route as AuthSignUpRouteImport } from './routes/auth.sign-up'
+import { Route as AuthSsoRouteImport } from './routes/auth.sso'
+import { Route as AuthVerifyEmailRouteImport } from './routes/auth.verify-email'
+import { Route as CheckinCodeRouteImport } from './routes/checkin.$code'
+import { Route as ContentManageRouteImport } from './routes/content.manage'
+import { Route as SettingsRolesRouteImport } from './routes/settings.roles'
+import { Route as ApiAuthSageCallbackRouteImport } from './routes/api.auth.sage.callback'
+import { Route as ApiAuthSageStartRouteImport } from './routes/api.auth.sage.start'
+import { Route as ApiAuthSageStatusRouteImport } from './routes/api.auth.sage.status'
+import { Route as ApiAuthSageTestRouteImport } from './routes/api.auth.sage.test'
 
-const WelcomeRoute = WelcomeRouteImport.update({
-  id: '/welcome',
-  path: '/welcome',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const UnionStationAdminRoute = UnionStationAdminRouteImport.update({
-  id: '/union-station-admin',
-  path: '/union-station-admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const UnionStationRoute = UnionStationRouteImport.update({
-  id: '/union-station',
-  path: '/union-station',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TourRequestRoute = TourRequestRouteImport.update({
-  id: '/tour-request',
-  path: '/tour-request',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TourCalendarRoute = TourCalendarRouteImport.update({
-  id: '/tour-calendar',
-  path: '/tour-calendar',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TenantsRoute = TenantsRouteImport.update({
-  id: '/tenants',
-  path: '/tenants',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TenantAccessRoute = TenantAccessRouteImport.update({
-  id: '/tenant-access',
-  path: '/tenant-access',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SupportRoute = SupportRouteImport.update({
-  id: '/support',
-  path: '/support',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StaffRoute = StaffRouteImport.update({
-  id: '/staff',
-  path: '/staff',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OutreachRoute = OutreachRouteImport.update({
-  id: '/outreach',
-  path: '/outreach',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OrganizationRoute = OrganizationRouteImport.update({
-  id: '/organization',
-  path: '/organization',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OnboardingRoute = OnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const NotificationsRoute = NotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MessagingRoute = MessagingRouteImport.update({
-  id: '/messaging',
-  path: '/messaging',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MarketplaceRoute = MarketplaceRouteImport.update({
-  id: '/marketplace',
-  path: '/marketplace',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LeadsIntelligenceRoute = LeadsIntelligenceRouteImport.update({
-  id: '/leads-intelligence',
-  path: '/leads-intelligence',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FacilitiesRoute = FacilitiesRouteImport.update({
-  id: '/facilities',
-  path: '/facilities',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EventsRoute = EventsRouteImport.update({
-  id: '/events',
-  path: '/events',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CrmRoute = CrmRouteImport.update({
-  id: '/crm',
-  path: '/crm',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CrawlerIntelligenceRoute = CrawlerIntelligenceRouteImport.update({
-  id: '/crawler-intelligence',
-  path: '/crawler-intelligence',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ContentRoute = ContentRouteImport.update({
-  id: '/content',
-  path: '/content',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CommunityRoute = CommunityRouteImport.update({
-  id: '/community',
-  path: '/community',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const CafeRoute = CafeRouteImport.update({
-  id: '/cafe',
-  path: '/cafe',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BookingsRoute = BookingsRouteImport.update({
-  id: '/bookings',
-  path: '/bookings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BillingRoute = BillingRouteImport.update({
-  id: '/billing',
-  path: '/billing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuditRoute = AuditRouteImport.update({
-  id: '/audit',
-  path: '/audit',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalyticsRoute = AnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AiAssistantRoute = AiAssistantRouteImport.update({
-  id: '/ai-assistant',
-  path: '/ai-assistant',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountRoute = AccountRouteImport.update({
@@ -195,49 +64,149 @@ const AccountRoute = AccountRouteImport.update({
   path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AiAssistantRoute = AiAssistantRouteImport.update({
+  id: '/ai-assistant',
+  path: '/ai-assistant',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsRolesRoute = SettingsRolesRouteImport.update({
-  id: '/settings/roles',
-  path: '/settings/roles',
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ContentManageRoute = ContentManageRouteImport.update({
-  id: '/manage',
-  path: '/manage',
-  getParentRoute: () => ContentRoute,
-} as any)
-const CheckinCodeRoute = CheckinCodeRouteImport.update({
-  id: '/checkin/$code',
-  path: '/checkin/$code',
+const AuditRoute = AuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthVerifyEmailRoute = AuthVerifyEmailRouteImport.update({
-  id: '/auth/verify-email',
-  path: '/auth/verify-email',
+const BillingRoute = BillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthSsoRoute = AuthSsoRouteImport.update({
-  id: '/auth/sso',
-  path: '/auth/sso',
+const BookingsRoute = BookingsRouteImport.update({
+  id: '/bookings',
+  path: '/bookings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthSignUpRoute = AuthSignUpRouteImport.update({
-  id: '/auth/sign-up',
-  path: '/auth/sign-up',
+const CafeRoute = CafeRouteImport.update({
+  id: '/cafe',
+  path: '/cafe',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthSignInRoute = AuthSignInRouteImport.update({
-  id: '/auth/sign-in',
-  path: '/auth/sign-in',
+const CommunityRoute = CommunityRouteImport.update({
+  id: '/community',
+  path: '/community',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
-  id: '/auth/reset-password',
-  path: '/auth/reset-password',
+const ContentRoute = ContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrawlerIntelligenceRoute = CrawlerIntelligenceRouteImport.update({
+  id: '/crawler-intelligence',
+  path: '/crawler-intelligence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CrmRoute = CrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventsRoute = EventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FacilitiesRoute = FacilitiesRouteImport.update({
+  id: '/facilities',
+  path: '/facilities',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeadsIntelligenceRoute = LeadsIntelligenceRouteImport.update({
+  id: '/leads-intelligence',
+  path: '/leads-intelligence',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MarketplaceRoute = MarketplaceRouteImport.update({
+  id: '/marketplace',
+  path: '/marketplace',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MessagingRoute = MessagingRouteImport.update({
+  id: '/messaging',
+  path: '/messaging',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrganizationRoute = OrganizationRouteImport.update({
+  id: '/organization',
+  path: '/organization',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OutreachRoute = OutreachRouteImport.update({
+  id: '/outreach',
+  path: '/outreach',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StaffRoute = StaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TenantAccessRoute = TenantAccessRouteImport.update({
+  id: '/tenant-access',
+  path: '/tenant-access',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TenantsRoute = TenantsRouteImport.update({
+  id: '/tenants',
+  path: '/tenants',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TourCalendarRoute = TourCalendarRouteImport.update({
+  id: '/tour-calendar',
+  path: '/tour-calendar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TourRequestRoute = TourRequestRouteImport.update({
+  id: '/tour-request',
+  path: '/tour-request',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UnionStationRoute = UnionStationRouteImport.update({
+  id: '/union-station',
+  path: '/union-station',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UnionStationAdminRoute = UnionStationAdminRouteImport.update({
+  id: '/union-station-admin',
+  path: '/union-station-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthForgotPasswordRoute = AuthForgotPasswordRouteImport.update({
+  id: '/auth/forgot-password',
+  path: '/auth/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthMfaRoute = AuthMfaRouteImport.update({
@@ -245,9 +214,64 @@ const AuthMfaRoute = AuthMfaRouteImport.update({
   path: '/auth/mfa',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthForgotPasswordRoute = AuthForgotPasswordRouteImport.update({
-  id: '/auth/forgot-password',
-  path: '/auth/forgot-password',
+const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
+  id: '/auth/reset-password',
+  path: '/auth/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSignInRoute = AuthSignInRouteImport.update({
+  id: '/auth/sign-in',
+  path: '/auth/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSignUpRoute = AuthSignUpRouteImport.update({
+  id: '/auth/sign-up',
+  path: '/auth/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSsoRoute = AuthSsoRouteImport.update({
+  id: '/auth/sso',
+  path: '/auth/sso',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthVerifyEmailRoute = AuthVerifyEmailRouteImport.update({
+  id: '/auth/verify-email',
+  path: '/auth/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CheckinCodeRoute = CheckinCodeRouteImport.update({
+  id: '/checkin/$code',
+  path: '/checkin/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContentManageRoute = ContentManageRouteImport.update({
+  id: '/manage',
+  path: '/manage',
+  getParentRoute: () => ContentRoute,
+} as any)
+const SettingsRolesRoute = SettingsRolesRouteImport.update({
+  id: '/settings/roles',
+  path: '/settings/roles',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSageCallbackRoute = ApiAuthSageCallbackRouteImport.update({
+  id: '/api/auth/sage/callback',
+  path: '/api/auth/sage/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSageStartRoute = ApiAuthSageStartRouteImport.update({
+  id: '/api/auth/sage/start',
+  path: '/api/auth/sage/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSageStatusRoute = ApiAuthSageStatusRouteImport.update({
+  id: '/api/auth/sage/status',
+  path: '/api/auth/sage/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSageTestRoute = ApiAuthSageTestRouteImport.update({
+  id: '/api/auth/sage/test',
+  path: '/api/auth/sage/test',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -292,6 +316,10 @@ export interface FileRoutesByFullPath {
   '/checkin/$code': typeof CheckinCodeRoute
   '/content/manage': typeof ContentManageRoute
   '/settings/roles': typeof SettingsRolesRoute
+  '/api/auth/sage/callback': typeof ApiAuthSageCallbackRoute
+  '/api/auth/sage/start': typeof ApiAuthSageStartRoute
+  '/api/auth/sage/status': typeof ApiAuthSageStatusRoute
+  '/api/auth/sage/test': typeof ApiAuthSageTestRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -334,6 +362,10 @@ export interface FileRoutesByTo {
   '/checkin/$code': typeof CheckinCodeRoute
   '/content/manage': typeof ContentManageRoute
   '/settings/roles': typeof SettingsRolesRoute
+  '/api/auth/sage/callback': typeof ApiAuthSageCallbackRoute
+  '/api/auth/sage/start': typeof ApiAuthSageStartRoute
+  '/api/auth/sage/status': typeof ApiAuthSageStatusRoute
+  '/api/auth/sage/test': typeof ApiAuthSageTestRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -377,6 +409,10 @@ export interface FileRoutesById {
   '/checkin/$code': typeof CheckinCodeRoute
   '/content/manage': typeof ContentManageRoute
   '/settings/roles': typeof SettingsRolesRoute
+  '/api/auth/sage/callback': typeof ApiAuthSageCallbackRoute
+  '/api/auth/sage/start': typeof ApiAuthSageStartRoute
+  '/api/auth/sage/status': typeof ApiAuthSageStatusRoute
+  '/api/auth/sage/test': typeof ApiAuthSageTestRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -421,6 +457,10 @@ export interface FileRouteTypes {
     | '/checkin/$code'
     | '/content/manage'
     | '/settings/roles'
+    | '/api/auth/sage/callback'
+    | '/api/auth/sage/start'
+    | '/api/auth/sage/status'
+    | '/api/auth/sage/test'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -463,6 +503,10 @@ export interface FileRouteTypes {
     | '/checkin/$code'
     | '/content/manage'
     | '/settings/roles'
+    | '/api/auth/sage/callback'
+    | '/api/auth/sage/start'
+    | '/api/auth/sage/status'
+    | '/api/auth/sage/test'
   id:
     | '__root__'
     | '/'
@@ -505,6 +549,10 @@ export interface FileRouteTypes {
     | '/checkin/$code'
     | '/content/manage'
     | '/settings/roles'
+    | '/api/auth/sage/callback'
+    | '/api/auth/sage/start'
+    | '/api/auth/sage/status'
+    | '/api/auth/sage/test'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -547,204 +595,19 @@ export interface RootRouteChildren {
   AuthVerifyEmailRoute: typeof AuthVerifyEmailRoute
   CheckinCodeRoute: typeof CheckinCodeRoute
   SettingsRolesRoute: typeof SettingsRolesRoute
+  ApiAuthSageCallbackRoute: typeof ApiAuthSageCallbackRoute
+  ApiAuthSageStartRoute: typeof ApiAuthSageStartRoute
+  ApiAuthSageStatusRoute: typeof ApiAuthSageStatusRoute
+  ApiAuthSageTestRoute: typeof ApiAuthSageTestRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/welcome': {
-      id: '/welcome'
-      path: '/welcome'
-      fullPath: '/welcome'
-      preLoaderRoute: typeof WelcomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/union-station-admin': {
-      id: '/union-station-admin'
-      path: '/union-station-admin'
-      fullPath: '/union-station-admin'
-      preLoaderRoute: typeof UnionStationAdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/union-station': {
-      id: '/union-station'
-      path: '/union-station'
-      fullPath: '/union-station'
-      preLoaderRoute: typeof UnionStationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tour-request': {
-      id: '/tour-request'
-      path: '/tour-request'
-      fullPath: '/tour-request'
-      preLoaderRoute: typeof TourRequestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tour-calendar': {
-      id: '/tour-calendar'
-      path: '/tour-calendar'
-      fullPath: '/tour-calendar'
-      preLoaderRoute: typeof TourCalendarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tenants': {
-      id: '/tenants'
-      path: '/tenants'
-      fullPath: '/tenants'
-      preLoaderRoute: typeof TenantsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tenant-access': {
-      id: '/tenant-access'
-      path: '/tenant-access'
-      fullPath: '/tenant-access'
-      preLoaderRoute: typeof TenantAccessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/support': {
-      id: '/support'
-      path: '/support'
-      fullPath: '/support'
-      preLoaderRoute: typeof SupportRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/staff': {
-      id: '/staff'
-      path: '/staff'
-      fullPath: '/staff'
-      preLoaderRoute: typeof StaffRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/outreach': {
-      id: '/outreach'
-      path: '/outreach'
-      fullPath: '/outreach'
-      preLoaderRoute: typeof OutreachRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/organization': {
-      id: '/organization'
-      path: '/organization'
-      fullPath: '/organization'
-      preLoaderRoute: typeof OrganizationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/onboarding': {
-      id: '/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/notifications': {
-      id: '/notifications'
-      path: '/notifications'
-      fullPath: '/notifications'
-      preLoaderRoute: typeof NotificationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/messaging': {
-      id: '/messaging'
-      path: '/messaging'
-      fullPath: '/messaging'
-      preLoaderRoute: typeof MessagingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/marketplace': {
-      id: '/marketplace'
-      path: '/marketplace'
-      fullPath: '/marketplace'
-      preLoaderRoute: typeof MarketplaceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/leads-intelligence': {
-      id: '/leads-intelligence'
-      path: '/leads-intelligence'
-      fullPath: '/leads-intelligence'
-      preLoaderRoute: typeof LeadsIntelligenceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/facilities': {
-      id: '/facilities'
-      path: '/facilities'
-      fullPath: '/facilities'
-      preLoaderRoute: typeof FacilitiesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/events': {
-      id: '/events'
-      path: '/events'
-      fullPath: '/events'
-      preLoaderRoute: typeof EventsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/crm': {
-      id: '/crm'
-      path: '/crm'
-      fullPath: '/crm'
-      preLoaderRoute: typeof CrmRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/crawler-intelligence': {
-      id: '/crawler-intelligence'
-      path: '/crawler-intelligence'
-      fullPath: '/crawler-intelligence'
-      preLoaderRoute: typeof CrawlerIntelligenceRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/content': {
-      id: '/content'
-      path: '/content'
-      fullPath: '/content'
-      preLoaderRoute: typeof ContentRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/community': {
-      id: '/community'
-      path: '/community'
-      fullPath: '/community'
-      preLoaderRoute: typeof CommunityRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/cafe': {
-      id: '/cafe'
-      path: '/cafe'
-      fullPath: '/cafe'
-      preLoaderRoute: typeof CafeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/bookings': {
-      id: '/bookings'
-      path: '/bookings'
-      fullPath: '/bookings'
-      preLoaderRoute: typeof BookingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/billing': {
-      id: '/billing'
-      path: '/billing'
-      fullPath: '/billing'
-      preLoaderRoute: typeof BillingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/audit': {
-      id: '/audit'
-      path: '/audit'
-      fullPath: '/audit'
-      preLoaderRoute: typeof AuditRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analytics': {
-      id: '/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AnalyticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/ai-assistant': {
-      id: '/ai-assistant'
-      path: '/ai-assistant'
-      fullPath: '/ai-assistant'
-      preLoaderRoute: typeof AiAssistantRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account': {
@@ -754,67 +617,207 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/ai-assistant': {
+      id: '/ai-assistant'
+      path: '/ai-assistant'
+      fullPath: '/ai-assistant'
+      preLoaderRoute: typeof AiAssistantRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/roles': {
-      id: '/settings/roles'
-      path: '/settings/roles'
-      fullPath: '/settings/roles'
-      preLoaderRoute: typeof SettingsRolesRouteImport
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/content/manage': {
-      id: '/content/manage'
-      path: '/manage'
-      fullPath: '/content/manage'
-      preLoaderRoute: typeof ContentManageRouteImport
-      parentRoute: typeof ContentRoute
-    }
-    '/checkin/$code': {
-      id: '/checkin/$code'
-      path: '/checkin/$code'
-      fullPath: '/checkin/$code'
-      preLoaderRoute: typeof CheckinCodeRouteImport
+    '/audit': {
+      id: '/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof AuditRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/verify-email': {
-      id: '/auth/verify-email'
-      path: '/auth/verify-email'
-      fullPath: '/auth/verify-email'
-      preLoaderRoute: typeof AuthVerifyEmailRouteImport
+    '/billing': {
+      id: '/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof BillingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/sso': {
-      id: '/auth/sso'
-      path: '/auth/sso'
-      fullPath: '/auth/sso'
-      preLoaderRoute: typeof AuthSsoRouteImport
+    '/bookings': {
+      id: '/bookings'
+      path: '/bookings'
+      fullPath: '/bookings'
+      preLoaderRoute: typeof BookingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/sign-up': {
-      id: '/auth/sign-up'
-      path: '/auth/sign-up'
-      fullPath: '/auth/sign-up'
-      preLoaderRoute: typeof AuthSignUpRouteImport
+    '/cafe': {
+      id: '/cafe'
+      path: '/cafe'
+      fullPath: '/cafe'
+      preLoaderRoute: typeof CafeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/sign-in': {
-      id: '/auth/sign-in'
-      path: '/auth/sign-in'
-      fullPath: '/auth/sign-in'
-      preLoaderRoute: typeof AuthSignInRouteImport
+    '/community': {
+      id: '/community'
+      path: '/community'
+      fullPath: '/community'
+      preLoaderRoute: typeof CommunityRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/reset-password': {
-      id: '/auth/reset-password'
-      path: '/auth/reset-password'
-      fullPath: '/auth/reset-password'
-      preLoaderRoute: typeof AuthResetPasswordRouteImport
+    '/content': {
+      id: '/content'
+      path: '/content'
+      fullPath: '/content'
+      preLoaderRoute: typeof ContentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crawler-intelligence': {
+      id: '/crawler-intelligence'
+      path: '/crawler-intelligence'
+      fullPath: '/crawler-intelligence'
+      preLoaderRoute: typeof CrawlerIntelligenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/crm': {
+      id: '/crm'
+      path: '/crm'
+      fullPath: '/crm'
+      preLoaderRoute: typeof CrmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/events': {
+      id: '/events'
+      path: '/events'
+      fullPath: '/events'
+      preLoaderRoute: typeof EventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/facilities': {
+      id: '/facilities'
+      path: '/facilities'
+      fullPath: '/facilities'
+      preLoaderRoute: typeof FacilitiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leads-intelligence': {
+      id: '/leads-intelligence'
+      path: '/leads-intelligence'
+      fullPath: '/leads-intelligence'
+      preLoaderRoute: typeof LeadsIntelligenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/marketplace': {
+      id: '/marketplace'
+      path: '/marketplace'
+      fullPath: '/marketplace'
+      preLoaderRoute: typeof MarketplaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/messaging': {
+      id: '/messaging'
+      path: '/messaging'
+      fullPath: '/messaging'
+      preLoaderRoute: typeof MessagingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/organization': {
+      id: '/organization'
+      path: '/organization'
+      fullPath: '/organization'
+      preLoaderRoute: typeof OrganizationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/outreach': {
+      id: '/outreach'
+      path: '/outreach'
+      fullPath: '/outreach'
+      preLoaderRoute: typeof OutreachRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/staff': {
+      id: '/staff'
+      path: '/staff'
+      fullPath: '/staff'
+      preLoaderRoute: typeof StaffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tenant-access': {
+      id: '/tenant-access'
+      path: '/tenant-access'
+      fullPath: '/tenant-access'
+      preLoaderRoute: typeof TenantAccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tenants': {
+      id: '/tenants'
+      path: '/tenants'
+      fullPath: '/tenants'
+      preLoaderRoute: typeof TenantsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tour-calendar': {
+      id: '/tour-calendar'
+      path: '/tour-calendar'
+      fullPath: '/tour-calendar'
+      preLoaderRoute: typeof TourCalendarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tour-request': {
+      id: '/tour-request'
+      path: '/tour-request'
+      fullPath: '/tour-request'
+      preLoaderRoute: typeof TourRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/union-station': {
+      id: '/union-station'
+      path: '/union-station'
+      fullPath: '/union-station'
+      preLoaderRoute: typeof UnionStationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/union-station-admin': {
+      id: '/union-station-admin'
+      path: '/union-station-admin'
+      fullPath: '/union-station-admin'
+      preLoaderRoute: typeof UnionStationAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/forgot-password': {
+      id: '/auth/forgot-password'
+      path: '/auth/forgot-password'
+      fullPath: '/auth/forgot-password'
+      preLoaderRoute: typeof AuthForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/mfa': {
@@ -824,11 +827,88 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthMfaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/forgot-password': {
-      id: '/auth/forgot-password'
-      path: '/auth/forgot-password'
-      fullPath: '/auth/forgot-password'
-      preLoaderRoute: typeof AuthForgotPasswordRouteImport
+    '/auth/reset-password': {
+      id: '/auth/reset-password'
+      path: '/auth/reset-password'
+      fullPath: '/auth/reset-password'
+      preLoaderRoute: typeof AuthResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/sign-in': {
+      id: '/auth/sign-in'
+      path: '/auth/sign-in'
+      fullPath: '/auth/sign-in'
+      preLoaderRoute: typeof AuthSignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/sign-up': {
+      id: '/auth/sign-up'
+      path: '/auth/sign-up'
+      fullPath: '/auth/sign-up'
+      preLoaderRoute: typeof AuthSignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/sso': {
+      id: '/auth/sso'
+      path: '/auth/sso'
+      fullPath: '/auth/sso'
+      preLoaderRoute: typeof AuthSsoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/verify-email': {
+      id: '/auth/verify-email'
+      path: '/auth/verify-email'
+      fullPath: '/auth/verify-email'
+      preLoaderRoute: typeof AuthVerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/checkin/$code': {
+      id: '/checkin/$code'
+      path: '/checkin/$code'
+      fullPath: '/checkin/$code'
+      preLoaderRoute: typeof CheckinCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/content/manage': {
+      id: '/content/manage'
+      path: '/manage'
+      fullPath: '/content/manage'
+      preLoaderRoute: typeof ContentManageRouteImport
+      parentRoute: typeof ContentRoute
+    }
+    '/settings/roles': {
+      id: '/settings/roles'
+      path: '/settings/roles'
+      fullPath: '/settings/roles'
+      preLoaderRoute: typeof SettingsRolesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/sage/callback': {
+      id: '/api/auth/sage/callback'
+      path: '/api/auth/sage/callback'
+      fullPath: '/api/auth/sage/callback'
+      preLoaderRoute: typeof ApiAuthSageCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/sage/start': {
+      id: '/api/auth/sage/start'
+      path: '/api/auth/sage/start'
+      fullPath: '/api/auth/sage/start'
+      preLoaderRoute: typeof ApiAuthSageStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/sage/status': {
+      id: '/api/auth/sage/status'
+      path: '/api/auth/sage/status'
+      fullPath: '/api/auth/sage/status'
+      preLoaderRoute: typeof ApiAuthSageStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/sage/test': {
+      id: '/api/auth/sage/test'
+      path: '/api/auth/sage/test'
+      fullPath: '/api/auth/sage/test'
+      preLoaderRoute: typeof ApiAuthSageTestRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -885,6 +965,10 @@ const rootRouteChildren: RootRouteChildren = {
   AuthVerifyEmailRoute: AuthVerifyEmailRoute,
   CheckinCodeRoute: CheckinCodeRoute,
   SettingsRolesRoute: SettingsRolesRoute,
+  ApiAuthSageCallbackRoute: ApiAuthSageCallbackRoute,
+  ApiAuthSageStartRoute: ApiAuthSageStartRoute,
+  ApiAuthSageStatusRoute: ApiAuthSageStatusRoute,
+  ApiAuthSageTestRoute: ApiAuthSageTestRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

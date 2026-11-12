@@ -15,7 +15,12 @@ export async function migrateLocalInvoicesToSage(): Promise<MigrationResult> {
       successful: 0,
       failed: 0,
       total: 0,
-      errors: [{ invoiceId: "", error: "Sage API client not configured." }],
+      errors: [
+        {
+          invoiceId: "",
+          error: "Browser-based Sage migration is disabled; use the server-side OAuth integration.",
+        },
+      ],
     };
   }
 

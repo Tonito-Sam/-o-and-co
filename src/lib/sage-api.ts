@@ -534,22 +534,6 @@ export class SageApiClient {
   }
 }
 
-let sageApiClient: SageApiClient | null = null;
-
-const getRuntimeSageConfig = (): SageConfig | null => {
-  if (typeof window === "undefined") return null;
-
-  const apiUrl = (import.meta.env.VITE_SAGE_API_URL as string | undefined) ?? (import.meta.env.NEXT_PUBLIC_SAGE_API_URL as string | undefined) ?? "https://accounting.sageone.co.za/api/2.00";
-  const apiKey = (import.meta.env.VITE_SAGE_API_KEY as string | undefined) ?? (import.meta.env.NEXT_PUBLIC_SAGE_API_KEY as string | undefined) ?? "";
-  const companyId = (import.meta.env.VITE_SAGE_COMPANY_ID as string | undefined) ?? (import.meta.env.NEXT_PUBLIC_SAGE_COMPANY_ID as string | undefined) ?? "";
-  const username = (import.meta.env.VITE_SAGE_USERNAME as string | undefined) ?? (import.meta.env.NEXT_PUBLIC_SAGE_USERNAME as string | undefined) ?? "";
-  const password = (import.meta.env.VITE_SAGE_PASSWORD as string | undefined) ?? (import.meta.env.NEXT_PUBLIC_SAGE_PASSWORD as string | undefined) ?? "";
-
-  if (!apiKey || !companyId || !username || !password) return null;
-
-  return { apiUrl, apiKey, companyId, username, password };
-};
-
 export function getSageRuntimeMode(): SageRuntimeMode {
   const mode = (import.meta.env.VITE_SAGE_MODE as string | undefined) ?? (import.meta.env.NEXT_PUBLIC_SAGE_MODE as string | undefined) ?? "demo";
   const normalized = mode.toLowerCase();
@@ -562,50 +546,8 @@ export function getSageRuntimeMode(): SageRuntimeMode {
 }
 
 export function getSageApiClient(): SageApiClient | null {
-  if (typeof window === "undefined") return null;
-
-  const mode = getSageRuntimeMode();
-
-  if (!sageApiClient) {
-    const config = getRuntimeSageConfig();
-    if (!config && mode === "demo") {
-      console.warn("Sage API credentials not configured. Falling back to mock data.");
-      return null;
-    }
-
-    if (!config && mode === "sandbox") {
-      sageApiClient = new SageApiClient({
-        apiUrl: "https://sandbox.accounting.sageone.co.za/api/2.00",
-        apiKey: "sandbox",
-        companyId: "sandbox",
-        username: "sandbox",
-        password: "sandbox",
-      }, "sandbox");
-      return sageApiClient;
-    }
-
-    if (!config) {
-      console.warn("Sage API credentials not configured. Falling back to mock data.");
-      return null;
-    }
-
-    sageApiClient = new SageApiClient(config, mode === "sandbox" ? "sandbox" : "live");
-  }
-
-  return sageApiClient;
-}
-
-export function isSageConfigured(): boolean {
-  return Boolean(
-    import.meta.env.VITE_SAGE_API_KEY ||
-      import.meta.env.VITE_SAGE_COMPANY_ID ||
-      import.meta.env.VITE_SAGE_USERNAME ||
-      import.meta.env.VITE_SAGE_PASSWORD ||
-      import.meta.env.NEXT_PUBLIC_SAGE_API_KEY ||
-      import.meta.env.NEXT_PUBLIC_SAGE_COMPANY_ID ||
-      import.meta.env.NEXT_PUBLIC_SAGE_USERNAME ||
-      import.meta.env.NEXT_PUBLIC_SAGE_PASSWORD,
-  );
+  console.warn("The browser Sage API client is disabled; use the server-side OAuth integration.");
+  return null;
 }
 
 export function mapSageInvoiceToAppInvoice(sageInvoice: SageInvoice): Invoice {
