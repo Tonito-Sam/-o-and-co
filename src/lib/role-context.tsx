@@ -88,6 +88,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     }
 
     let active = true;
+    let loadedIdentityUserId: string | null = null;
     const roleMap: Record<string, RoleId> = {
       superadmin: "superadmin",
       group_admin: "group-admin",
@@ -217,6 +218,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         setOrganizationBranch(null);
         setOrganizationSections(null);
       }
+      loadedIdentityUserId = userId;
       setIsLoading(false);
     };
 
@@ -239,9 +241,19 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Session refreshes and same-user sign-in notifications do not require a workspace reload.
+      if (event === "TOKEN_REFRESHED") return;
+      if (
+        (event === "SIGNED_IN" || event === "INITIAL_SESSION") &&
+        session?.user.id === loadedIdentityUserId
+      ) {
+        return;
+      }
+
       setIsLoading(true);
       if (!session?.user) {
+        loadedIdentityUserId = null;
         setRoleId("member");
         setUserName(null);
         setOrganizationName(null);

@@ -9,7 +9,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import "@fontsource/outfit/400.css";
 import "@fontsource/outfit/500.css";
@@ -179,9 +179,11 @@ function RouteAccessGuard({ pathname, children }: { pathname: string; children: 
   const onboardingRoute = pathname === "/onboarding";
   const [checkingAccess, setCheckingAccess] = useState(!isPublicRoute(pathname));
   const [accessError, setAccessError] = useState("");
+  const hasResolvedWorkspaceAccess = useRef(false);
 
   useEffect(() => {
     if (isPublicRoute(pathname)) {
+      hasResolvedWorkspaceAccess.current = false;
       setCheckingAccess(false);
       setAccessError("");
       return;
@@ -193,12 +195,13 @@ function RouteAccessGuard({ pathname, children }: { pathname: string; children: 
     }
 
     let active = true;
-    setCheckingAccess(true);
+    if (!hasResolvedWorkspaceAccess.current) setCheckingAccess(true);
     setAccessError("");
     const resolveAccess = async () => {
       const { data, error: sessionError } = await supabase.auth.getSession();
       if (!active) return;
       if (sessionError || !data.session) {
+        hasResolvedWorkspaceAccess.current = false;
         navigate({ to: pathname === "/" ? "/welcome" : "/auth/sign-in", replace: true });
         return;
       }
@@ -218,11 +221,13 @@ function RouteAccessGuard({ pathname, children }: { pathname: string; children: 
       if (!active) return;
       const lookupError = roleResult.error ?? membershipResult.error;
       if (lookupError) {
+        hasResolvedWorkspaceAccess.current = false;
         setAccessError("Workspace access could not be verified. Reload the page to try again.");
         setCheckingAccess(false);
         return;
       }
 
+      hasResolvedWorkspaceAccess.current = true;
       const officeRoles = new Set([
         "superadmin",
         "group_admin",
