@@ -368,6 +368,8 @@ function Outreach() {
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [historyFilter, setHistoryFilter] = useState("all");
   const [sending, setSending] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(false);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
@@ -545,6 +547,65 @@ function Outreach() {
     setSubject(template.subject);
     setBody(template.body);
     setTemplateValues({});
+  };
+
+  const saveCampaignDraft = async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Supabase is not configured in this environment.");
+      return;
+    }
+    setDraftSaving(true);
+    const { error } = await supabase.from("outreach_campaign_drafts").upsert(
+      {
+        campaign_name: campaignName,
+        subject,
+        body,
+        template_id: selectedTemplateId || null,
+        template_values: templateValues,
+        audience: campaignAudience,
+        prospect_ids: selectedCampaignProspectIds,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
+    setDraftSaving(false);
+    if (error) {
+      toast.error(`Draft could not be saved: ${error.message}`);
+      return;
+    }
+    toast.success("Campaign draft saved.");
+  };
+
+  const loadCampaignDraft = async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Supabase is not configured in this environment.");
+      return;
+    }
+    setDraftLoading(true);
+    const { data, error } = await supabase
+      .from("outreach_campaign_drafts")
+      .select("campaign_name,subject,body,template_id,template_values,audience,prospect_ids")
+      .maybeSingle();
+    setDraftLoading(false);
+    if (error) {
+      toast.error(`Draft could not be loaded: ${error.message}`);
+      return;
+    }
+    if (!data) {
+      toast.error("No saved campaign draft was found.");
+      return;
+    }
+    setCampaignName(data.campaign_name);
+    setSubject(data.subject);
+    setBody(data.body);
+    setSelectedTemplateId(data.template_id ?? "");
+    setTemplateValues(data.template_values ?? {});
+    setCampaignAudience(data.audience);
+    setSelectedCampaignProspectIds(data.prospect_ids ?? []);
+    setCampaignConsentConfirmed(false);
+    toast.success("Campaign draft loaded. Confirm recipient opt-in before sending.");
   };
 
   const toggleCampaignProspect = (prospectId: string) => {
@@ -857,8 +918,8 @@ function Outreach() {
                         {prospectCandidates.every((p) =>
                           selectedCampaignProspectIds.includes(p.id),
                         )
-                          ? "Clear visible"
-                          : "Select visible"}
+                          ? "Clear shown"
+                          : `Select all shown (${prospectCandidates.length})`}
                       </Button>
                     </div>
                     <div className="space-y-2 border-b px-3 py-3">
@@ -985,6 +1046,17 @@ function Outreach() {
                           ))}
                       </SelectContent>
                     </Select>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Need to email multiple prospects?
+                      </p>
+                      <Button asChild size="sm" variant="outline" className="gap-1.5">
+                        <Link to="/outreach" search={{ mode: "campaign" }}>
+                          <Users className="size-3.5" />
+                          Select multiple prospects
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-2">
@@ -1061,39 +1133,37 @@ function Outreach() {
               </p>
             </div>
             <div className="space-y-4 p-5">
-              {!isCampaign && (
-                <div className="space-y-2">
-                  <Label htmlFor="saved-template">Saved template</Label>
-                  <Select
-                    value={selectedTemplateId || "none"}
-                    onValueChange={(value) => chooseTemplate(value === "none" ? "" : value)}
-                  >
-                    <SelectTrigger id="saved-template">
-                      <SelectValue placeholder="Start from scratch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Start from scratch</SelectItem>
-                      {templates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {templates.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      No enabled CRM templates are available; compose your own message below.
-                    </p>
-                  )}
-                  {templateError && (
-                    <p className="text-xs text-muted-foreground">
-                      Saved templates unavailable: {templateError}
-                    </p>
-                  )}
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="saved-template">Saved template</Label>
+                <Select
+                  value={selectedTemplateId || "none"}
+                  onValueChange={(value) => chooseTemplate(value === "none" ? "" : value)}
+                >
+                  <SelectTrigger id="saved-template">
+                    <SelectValue placeholder="Start from scratch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Start from scratch</SelectItem>
+                    {templates.map((template) => (
+                      <SelectItem key={template.id} value={template.id}>
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {templates.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No enabled CRM templates are available; compose your own message below.
+                  </p>
+                )}
+                {templateError && (
+                  <p className="text-xs text-muted-foreground">
+                    Saved templates unavailable: {templateError}
+                  </p>
+                )}
+              </div>
 
-              {!isCampaign && templateTokens.length > 0 && (
+              {templateTokens.length > 0 && (
                 <div className="rounded-md border bg-muted/10 p-3">
                   <div className="mb-2 flex items-center gap-2 text-xs font-medium">
                     <FileText className="size-3.5 text-brand" />
@@ -1198,6 +1268,26 @@ function Outreach() {
                   ? "Each message is sent separately. Confirm opted-in recipients before sending."
                   : "This send includes a clear yes/no CTA and should only be used where a compliant consent path exists."}
               </p>
+              {isCampaign && (
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void loadCampaignDraft()}
+                    disabled={draftLoading || draftSaving}
+                  >
+                    {draftLoading ? "Loading…" : "Load draft"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void saveCampaignDraft()}
+                    disabled={draftSaving || draftLoading}
+                  >
+                    {draftSaving ? "Saving…" : "Save draft"}
+                  </Button>
+                </div>
+              )}
               <Button
                 type="button"
                 onClick={() => void send()}
