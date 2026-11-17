@@ -111,7 +111,6 @@ Deno.serve(async (request) => {
     .update({
       payment_reference: reference,
       payment_authorization_url: paymentResult.data.authorization_url,
-      payment_access_code: paymentResult.data.access_code,
     })
     .eq("id", order.id)
     .eq("payment_status", "Pending verification")

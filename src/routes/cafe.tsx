@@ -18,6 +18,18 @@ import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
 import { resumePaystackModal } from "@/lib/paystack-modal";
 
+async function getEdgeFunctionErrorMessage(error: { message: string; context: unknown }) {
+  if (error.context instanceof Response) {
+    const body = await error.context.clone().json().catch(() => null) as {
+      error?: unknown;
+      message?: unknown;
+    } | null;
+    if (typeof body?.error === "string") return body.error;
+    if (typeof body?.message === "string") return body.message;
+  }
+  return error.message;
+}
+
 function CafeProductImage({ product, className }: { product: CafeProduct; className: string }) {
   if (!product.image) {
     return (
@@ -102,9 +114,9 @@ function Cafe() {
     }
     let active = true;
     void supabase.functions.invoke("verify-cafe-payment", { body: { reference: paymentReference } })
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (!active) return;
-        if (error) toast.error(`Could not verify café payment: ${error.message}`);
+        if (error) toast.error(`Could not verify café payment: ${await getEdgeFunctionErrorMessage(error)}`);
         else if (data?.paid) {
           toast.success("Payment confirmed. Your order is in the café queue.");
           setTab("orders");
@@ -1401,7 +1413,7 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
         const { data: payment, error: paymentError } = await supabase.functions.invoke("initialize-cafe-payment", {
           body: { order_id: order.order_id },
         });
-        if (paymentError) throw new Error(paymentError.message);
+        if (paymentError) throw new Error(await getEdgeFunctionErrorMessage(paymentError));
         if (typeof payment?.access_code === "string") {
           setPaystackModalOpen(true);
           const modalResult = await resumePaystackModal(payment.access_code);
@@ -1416,7 +1428,7 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
             "verify-cafe-payment",
             { body: { reference: modalResult.reference } },
           );
-          if (verificationError) throw new Error(verificationError.message);
+          if (verificationError) throw new Error(await getEdgeFunctionErrorMessage(verificationError));
           if (!verification?.paid) {
             toast.info("Payment is still processing. Your order will enter the kitchen queue after confirmation.");
             return;
@@ -1712,7 +1724,7 @@ function MyOrders({ branch, active }: { branch: string; active: boolean }) {
       const { data, error } = await supabase.functions.invoke("initialize-cafe-payment", {
         body: { order_id: order.orderId },
       });
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(await getEdgeFunctionErrorMessage(error));
       if (typeof data?.access_code === "string") {
         const modalResult = await resumePaystackModal(data.access_code);
         if (modalResult.status === "cancelled") {
@@ -1724,7 +1736,7 @@ function MyOrders({ branch, active }: { branch: string; active: boolean }) {
           "verify-cafe-payment",
           { body: { reference: modalResult.reference } },
         );
-        if (verificationError) throw new Error(verificationError.message);
+        if (verificationError) throw new Error(await getEdgeFunctionErrorMessage(verificationError));
         if (!verification?.paid) {
           toast.info("Payment is still processing. Your order will enter the kitchen queue after confirmation.");
           return;
