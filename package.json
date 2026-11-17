@@ -19,6 +19,7 @@
     "@fontsource/figtree": "^5.2.10",
     "@fontsource/outfit": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
+    "@paystack/inline-js": "^2.28.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",

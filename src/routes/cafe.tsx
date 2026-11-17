@@ -16,6 +16,7 @@ import { useRole } from "@/lib/role-context";
 import { BellRing, CheckCircle2, Coffee, Plus, ShoppingBag, Minus, Trash2, ChefHat, Store, History, ReceiptText, CreditCard, Wallet, LoaderCircle, RefreshCw, Package, Download, Upload, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
+import { resumePaystackModal } from "@/lib/paystack-modal";
 
 function CafeProductImage({ product, className }: { product: CafeProduct; className: string }) {
   if (!product.image) {
@@ -219,7 +220,7 @@ function Cafe() {
         {isAdmin && <TabsContent value="admin"><AdminPanel defaultBranch={branch} liveBranches={liveBranches} canPickBranch={canPickCafeBranch} products={products} loading={productsLoading} onReload={() => setReloadKey((key) => key + 1)} /></TabsContent>}
         {isAdmin && <TabsContent value="kitchen"><KitchenBoard defaultBranch={branch} canPickBranch={canPickCafeBranch} /></TabsContent>}
         {canManagePantry && <TabsContent value="pantry"><PantryBoard defaultBranch={branch} canPickBranch={role.id === "branch-manager"} canReviewRequests={canReviewRestockRequests} /></TabsContent>}
-        <TabsContent value="shop"><Shop defaultBranch={branch} liveBranches={liveBranches} canPickBranch={isAdmin && canPickCafeBranch} paystackEnabled={paystackEnabled} products={products} loading={productsLoading} /></TabsContent>
+        <TabsContent value="shop"><Shop defaultBranch={branch} liveBranches={liveBranches} canPickBranch={isAdmin && canPickCafeBranch} paystackEnabled={paystackEnabled} products={products} loading={productsLoading} onPaymentConfirmed={() => setTab("orders")} /></TabsContent>
         <TabsContent value="orders"><MyOrders branch={branch} active={tab === "orders"} /></TabsContent>
       </Tabs>
     </div>
@@ -1328,7 +1329,7 @@ type CafeCheckoutResult = {
   created_at: string;
 };
 
-function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, products, loading }: { defaultBranch: string; liveBranches: string[]; canPickBranch: boolean; paystackEnabled: boolean; products: CafeProduct[]; loading: boolean }) {
+function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, products, loading, onPaymentConfirmed }: { defaultBranch: string; liveBranches: string[]; canPickBranch: boolean; paystackEnabled: boolean; products: CafeProduct[]; loading: boolean; onPaymentConfirmed: () => void }) {
   const [branch, setBranch] = useState(defaultBranch);
   const [cat, setCat] = useState<string>("All");
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -1336,6 +1337,7 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
   const [invoicePreview, setInvoicePreview] = useState<Invoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   const [placingOrder, setPlacingOrder] = useState(false);
+  const [paystackModalOpen, setPaystackModalOpen] = useState(false);
   const checkoutRequest = useRef<{ signature: string; id: string } | null>(null);
 
   useEffect(() => {
@@ -1395,17 +1397,47 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
       if (error) throw new Error(error.message);
 
       const order = data as CafeCheckoutResult;
-      checkoutRequest.current = null;
-      setCart({});
       if (method === "Paystack") {
         const { data: payment, error: paymentError } = await supabase.functions.invoke("initialize-cafe-payment", {
           body: { order_id: order.order_id },
         });
         if (paymentError) throw new Error(paymentError.message);
-        if (typeof payment?.authorization_url !== "string") throw new Error("Paystack did not return a payment link.");
-        window.location.assign(payment.authorization_url);
-        return;
+        if (typeof payment?.access_code === "string") {
+          setPaystackModalOpen(true);
+          const modalResult = await resumePaystackModal(payment.access_code);
+          setPaystackModalOpen(false);
+          if (modalResult.status === "cancelled") {
+            toast.info("Payment cancelled. Your cart is ready if you want to try again.");
+            return;
+          }
+          if (modalResult.status === "error") throw new Error(modalResult.message);
+
+          const { data: verification, error: verificationError } = await supabase.functions.invoke(
+            "verify-cafe-payment",
+            { body: { reference: modalResult.reference } },
+          );
+          if (verificationError) throw new Error(verificationError.message);
+          if (!verification?.paid) {
+            toast.info("Payment is still processing. Your order will enter the kitchen queue after confirmation.");
+            return;
+          }
+
+          setCart({});
+          checkoutRequest.current = null;
+          toast.success("Payment confirmed. Your order is in the café queue.");
+          onPaymentConfirmed();
+          return;
+        }
+        if (typeof payment?.authorization_url === "string") {
+          toast.info("This older pending payment will continue in Paystack's hosted checkout.");
+          window.location.assign(payment.authorization_url);
+          return;
+        }
+        throw new Error("Paystack did not return a checkout session.");
       }
+
+      checkoutRequest.current = null;
+      setCart({});
       const accountInvoice: Invoice | null = order.invoice_id && order.invoice_reference
         ? {
             id: order.invoice_reference,
@@ -1426,6 +1458,7 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
         ? `Order ${order.order_id} placed. Pay on delivery.`
         : `Order placed and invoice ${order.invoice_reference} charged to your organization.`);
     } catch (error) {
+      setPaystackModalOpen(false);
       toast.error(error instanceof Error ? error.message : "The café order could not be placed.");
     } finally {
       setPlacingOrder(false);
@@ -1538,7 +1571,7 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
               </div>
             </div>
             <Button className="w-full mt-3" onClick={() => void checkout(paymentMode === "paystack" ? "Paystack" : paymentMode === "cash_on_delivery" ? "Cash on Delivery" : "Charge to account")} disabled={placingOrder || cartItems.length === 0 || !branch}>
-              {placingOrder ? "Placing order…" : paymentMode === "paystack" ? "Pay now with Paystack" : paymentMode === "cash_on_delivery" ? "Place order · Pay on Delivery" : "Charge to account"}
+              {paystackModalOpen ? "Complete payment in Paystack…" : placingOrder ? "Placing order…" : paymentMode === "paystack" ? "Pay now with Paystack" : paymentMode === "cash_on_delivery" ? "Place order · Pay on Delivery" : "Charge to account"}
             </Button>
             {invoicePreview && (
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1581,16 +1614,12 @@ type CafeOrderRow = {
   amount_zar: number | null;
   method: string | null;
   payment_status: string;
-  payment_reference: string | null;
-  payment_authorization_url: string | null;
   due_date: string | null;
   created_at: string;
 };
 
 type CafeOrderInvoice = Invoice & {
   orderId: string;
-  paymentReference: string | null;
-  paymentAuthorizationUrl: string | null;
 };
 
 function MyOrders({ branch, active }: { branch: string; active: boolean }) {
@@ -1598,6 +1627,7 @@ function MyOrders({ branch, active }: { branch: string; active: boolean }) {
   const [orders, setOrders] = useState<CafeOrderInvoice[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
+  const [resumingOrderId, setResumingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!active) return;
@@ -1629,7 +1659,7 @@ function MyOrders({ branch, active }: { branch: string; active: boolean }) {
       const [{ data: orderRows, error: orderError }, { data: branchRows }] = await Promise.all([
         supabase
           .from("cafe_orders")
-          .select("id,branch_id,invoice_id,organization_name,purchaser_name,items,amount_zar,method,payment_status,payment_reference,payment_authorization_url,due_date,created_at")
+          .select("id,branch_id,invoice_id,organization_name,purchaser_name,items,amount_zar,method,payment_status,due_date,created_at")
           .eq("profile_id", userResult.user.id)
           .order("created_at", { ascending: false }),
         supabase.from("branches").select("id,name"),
@@ -1645,8 +1675,6 @@ function MyOrders({ branch, active }: { branch: string; active: boolean }) {
       const branchNames = new Map((branchRows ?? []).map(({ id, name }) => [id, name]));
       const savedOrders = ((orderRows ?? []) as CafeOrderRow[]).map((row): CafeOrderInvoice => ({
         orderId: row.id,
-        paymentReference: row.payment_reference,
-        paymentAuthorizationUrl: row.payment_authorization_url,
         id: row.invoice_id ?? row.id,
         tenant: row.organization_name ?? "Public customer",
         amount: Number(row.amount_zar ?? 0),
@@ -1674,23 +1702,50 @@ function MyOrders({ branch, active }: { branch: string; active: boolean }) {
   const recentRows = rows.filter((invoice) => new Date(invoice.issuedAt) >= thirtyDaysAgo);
   const monthRows = rows.filter((invoice) => new Date(invoice.issuedAt) >= monthStart);
   const resumePayment = async (order: CafeOrderInvoice) => {
-    if (order.paymentAuthorizationUrl) {
-      window.location.assign(order.paymentAuthorizationUrl);
-      return;
-    }
     const supabase = getSupabaseClient();
     if (!supabase) {
       toast.error("Payment cannot be resumed because Supabase is not configured.");
       return;
     }
-    const { data, error } = await supabase.functions.invoke("initialize-cafe-payment", {
-      body: { order_id: order.orderId },
-    });
-    if (error || typeof data?.authorization_url !== "string") {
-      toast.error(error?.message ?? "Could not resume café payment.");
-      return;
+    setResumingOrderId(order.orderId);
+    try {
+      const { data, error } = await supabase.functions.invoke("initialize-cafe-payment", {
+        body: { order_id: order.orderId },
+      });
+      if (error) throw new Error(error.message);
+      if (typeof data?.access_code === "string") {
+        const modalResult = await resumePaystackModal(data.access_code);
+        if (modalResult.status === "cancelled") {
+          toast.info("Payment cancelled. You can resume it from your orders.");
+          return;
+        }
+        if (modalResult.status === "error") throw new Error(modalResult.message);
+        const { data: verification, error: verificationError } = await supabase.functions.invoke(
+          "verify-cafe-payment",
+          { body: { reference: modalResult.reference } },
+        );
+        if (verificationError) throw new Error(verificationError.message);
+        if (!verification?.paid) {
+          toast.info("Payment is still processing. Your order will enter the kitchen queue after confirmation.");
+          return;
+        }
+        setOrders((current) =>
+          current.map((item) => item.orderId === order.orderId ? { ...item, status: "Paid" } : item),
+        );
+        toast.success("Payment confirmed. Your order is in the café queue.");
+        return;
+      }
+      if (typeof data?.authorization_url === "string") {
+        toast.info("This older pending payment will continue in Paystack's hosted checkout.");
+        window.location.assign(data.authorization_url);
+        return;
+      }
+      throw new Error("Paystack did not return a checkout session.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not resume café payment.");
+    } finally {
+      setResumingOrderId(null);
     }
-    window.location.assign(data.authorization_url);
   };
   return (
     <div className="space-y-3">
@@ -1740,7 +1795,7 @@ function MyOrders({ branch, active }: { branch: string; active: boolean }) {
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1.5">
                     {invoice.method === "Paystack" && invoice.status === "Pending verification" && (
-                      <Button size="sm" variant="outline" className="h-7" onClick={() => void resumePayment(invoice)}>Resume payment</Button>
+                      <Button size="sm" variant="outline" className="h-7" disabled={resumingOrderId === invoice.orderId} onClick={() => void resumePayment(invoice)}>{resumingOrderId === invoice.orderId ? "Opening…" : "Resume payment"}</Button>
                     )}
                     <Button size="sm" variant="outline" className="h-7" onClick={() => setViewingInvoice(invoice)}>View</Button>
                     <Button size="sm" variant="outline" className="h-7" onClick={() => downloadInvoicePdf(invoice)}>Download PDF</Button>

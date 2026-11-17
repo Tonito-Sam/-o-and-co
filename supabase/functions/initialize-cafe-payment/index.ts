@@ -62,8 +62,17 @@ Deno.serve(async (request) => {
     return json({ error: "This order is not awaiting Paystack payment." }, 409);
   }
   if (order.payment_status === "Paid") return json({ error: "This café order is already paid." }, 409);
-  if (order.payment_reference && order.payment_authorization_url) {
-    return json({ authorization_url: order.payment_authorization_url });
+  if (order.payment_reference) {
+    const { data: paymentSession, error: sessionError } = await admin
+      .from("cafe_payment_sessions")
+      .select("access_code")
+      .eq("order_id", order.id)
+      .maybeSingle();
+    if (sessionError) return json({ error: "Could not load the café payment session." }, 500);
+    if (paymentSession?.access_code) return json({ access_code: paymentSession.access_code });
+    if (order.payment_authorization_url) {
+      return json({ authorization_url: order.payment_authorization_url });
+    }
   }
   if (order.payment_reference) {
     return json({ error: "Payment initialization is already in progress. Refresh the order shortly." }, 409);
@@ -88,7 +97,12 @@ Deno.serve(async (request) => {
     return json({ error: "Paystack could not be reached. Your order remains awaiting payment." }, 502);
   }
   const paymentResult = await response.json().catch(() => null);
-  if (!response.ok || paymentResult?.status !== true || !paymentResult?.data?.authorization_url) {
+  if (
+    !response.ok ||
+    paymentResult?.status !== true ||
+    !paymentResult?.data?.authorization_url ||
+    !paymentResult?.data?.access_code
+  ) {
     return json({ error: "Paystack could not initialize this payment." }, 502);
   }
 
@@ -97,6 +111,7 @@ Deno.serve(async (request) => {
     .update({
       payment_reference: reference,
       payment_authorization_url: paymentResult.data.authorization_url,
+      payment_access_code: paymentResult.data.access_code,
     })
     .eq("id", order.id)
     .eq("payment_status", "Pending verification")
@@ -107,5 +122,14 @@ Deno.serve(async (request) => {
     return json({ error: "Payment was initialized but could not be linked to the order. Contact support before retrying." }, 500);
   }
 
-  return json({ authorization_url: paymentResult.data.authorization_url });
+  const { error: sessionError } = await admin.from("cafe_payment_sessions").upsert(
+    { order_id: order.id, access_code: paymentResult.data.access_code },
+    { onConflict: "order_id" },
+  );
+  if (sessionError) {
+    console.error("Could not save café Paystack access code:", sessionError.message);
+    return json({ error: "Payment started but its modal session could not be saved. Contact support before retrying." }, 500);
+  }
+
+  return json({ access_code: paymentResult.data.access_code });
 });
