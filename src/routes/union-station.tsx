@@ -16,6 +16,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { useRole } from "@/lib/role-context";
 import { VirtualTour } from "@/components/VirtualTour";
 import { tours } from "@/lib/tours";
+import { requestTourLandscape } from "@/lib/tour-orientation";
 
 export const Route = createFileRoute("/union-station")({
   head: () => ({ meta: [{ title: "Union Station Bookings — WorkspaceOS" }] }),
@@ -524,7 +525,10 @@ function PublicUnionStation() {
                 </div>
               ))}
             </div>
-            <Button className="gap-2" onClick={() => setVirtualTourOpen(true)}><Play className="size-4" />Start interactive tour</Button>
+            <Button className="gap-2" onClick={() => {
+              requestTourLandscape();
+              setVirtualTourOpen(true);
+            }}><Play className="size-4" />Start interactive tour</Button>
           </section>
         </TabsContent>
 

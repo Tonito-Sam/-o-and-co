@@ -1,6 +1,6 @@
 // src/routes/welcome.tsx
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,19 +17,25 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BrandLogo } from "@/components/BrandLogo";
 import { UnionStationBookingDialog } from "@/components/UnionStationBookingDialog";
+import { MobileHome } from "@/components/welcome/MobileHome";
+import { HeroVideoTreatment } from "@/components/welcome/HeroVideoTreatment";
 import { VirtualTour } from "@/components/VirtualTour";
+import { VirtualTourSelector } from "@/components/VirtualTourSelector";
 import bryanstonImg from "@/assets/space-bryanston.jpg";
-import rosebankImg from "@/assets/space-rosebank.jpg";
+import { heroCaptions, welcomeSlides } from "@/components/welcome/hero-media";
 import {
   ArrowRight, Check, Sparkles, MapPin, Calendar, Users, Coffee, ShieldCheck,
   Landmark, ChevronRight, ChevronLeft, LogIn, Phone, Mail, CheckCircle2,
   Clock, Play, Wifi, Presentation, Building2, Star, SquareStack,
   Menu as MenuIcon, X,
+  Volume2, VolumeX,
 } from "lucide-react";
 import { branches } from "@/lib/mock";
 import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
 import { tours, type Tour } from "@/lib/tours";
+import { requestTourLandscape } from "@/lib/tour-orientation";
+import welcomeSoundtrack from "../../welcomemedia/soundtracks/Aylex - Daydreams (freetouse.com).mp3";
 
 export const Route = createFileRoute("/welcome")({
   head: () => ({
@@ -71,22 +77,6 @@ type OneOffBookingResult = {
 
 type BookingTab = "tour" | "space";
 
-const kyalamiOfficeImg = "/kyalami/private-office-a.jpg";
-const heroSlides = [
-  {
-    image: rosebankImg,
-    name: "Rosebank",
-    tag: "Workspace in use",
-    copy: "Private offices, meeting rooms and shared workspace in Rosebank.",
-  },
-  {
-    image: kyalamiOfficeImg,
-    name: "Kyalami",
-    tag: "Private workspace",
-    copy: "Private offices, meeting rooms and shared workspace in Kyalami.",
-  },
-];
-
 /* ------------------------------------------------------------------ */
 /* ROOT                                                               */
 /* ------------------------------------------------------------------ */
@@ -94,10 +84,21 @@ function Welcome() {
   const nav = useNavigate();
   const { unionBooking } = Route.useSearch();
   const [activeTour, setActiveTour] = useState<Tour | null>(null);
+  const [tourSelectorOpen, setTourSelectorOpen] = useState(false);
   const [unionBookingOpen, setUnionBookingOpen] = useState(false);
   const [bookingRequest, setBookingRequest] = useState<{ branch: string; tab: BookingTab } | null>(null);
+  const isOverlayOpen = activeTour !== null || tourSelectorOpen || unionBookingOpen || bookingRequest !== null;
   const openBookingRequest = (branch: string, tab: BookingTab = "tour") =>
     setBookingRequest({ branch, tab });
+  const openTour = (id: Tour["id"]) => {
+    requestTourLandscape();
+    setActiveTour(tours[id]);
+  };
+  const selectVirtualTour = (id: Tour["id"]) => {
+    requestTourLandscape();
+    setTourSelectorOpen(false);
+    nav({ to: "/virtual-tour/$branch", params: { branch: id } });
+  };
 
   useEffect(() => {
     if (unionBooking === "open") setUnionBookingOpen(true);
@@ -105,17 +106,23 @@ function Welcome() {
 
   return (
     <div className="bg-background">
-      <SiteNav />
-      <Hero onOpenTour={(id) => setActiveTour(tours[id])} />
-      <ChooseYourNeed onOpenTour={(id) => setActiveTour(tours[id])} />
-      <Locations onOpenTour={(id) => setActiveTour(tours[id])} onOpenBooking={openBookingRequest} />
-      <Experience />
-      <UnionStationFeature
-        onOpenTour={() => setActiveTour(tours["union-station"])}
-        onOpenBooking={() => setUnionBookingOpen(true)}
-      />
-      <Proof />
-      <FAQ />
+      <div className="hidden md:block">
+        <SiteNav onOpenBooking={() => openBookingRequest("Kyalami", "tour")} />
+        <Hero
+          onOpenTourSelector={() => setTourSelectorOpen(true)}
+          onOpenBooking={() => openBookingRequest("Kyalami", "tour")}
+          isOverlayOpen={isOverlayOpen}
+        />
+        <ChooseYourNeed onOpenTour={openTour} />
+        <Locations onOpenTour={openTour} onOpenBooking={openBookingRequest} />
+        <Experience />
+        <UnionStationFeature
+          onOpenTour={() => openTour("union-station")}
+          onOpenBooking={() => setUnionBookingOpen(true)}
+        />
+        <Proof />
+        <FAQ />
+      </div>
       <BookingSection
         open={bookingRequest !== null}
         onOpenChange={(open) => {
@@ -124,9 +131,19 @@ function Welcome() {
         onOpenBooking={openBookingRequest}
         initialBranch={bookingRequest?.branch ?? "Kyalami"}
         initialTab={bookingRequest?.tab ?? "tour"}
+        sectionClassName="hidden md:block"
       />
-      <FinalCTA onOpenBooking={() => openBookingRequest("Kyalami", "tour")} />
-      <Footer />
+      <div className="hidden md:block">
+        <FinalCTA onOpenBooking={() => openBookingRequest("Kyalami", "tour")} />
+        <Footer />
+      </div>
+      <MobileHome
+        onOpenTour={openTour}
+        onOpenTourSelector={() => setTourSelectorOpen(true)}
+        onOpenBooking={openBookingRequest}
+        onOpenUnionBooking={() => setUnionBookingOpen(true)}
+        isOverlayOpen={isOverlayOpen}
+      />
 
       <VirtualTour
         tour={activeTour}
@@ -143,6 +160,11 @@ function Welcome() {
           nav({ to: "/tour-request", search: { branch: tourId } });
         }}
       />
+      <VirtualTourSelector
+        open={tourSelectorOpen}
+        onOpenChange={setTourSelectorOpen}
+        onSelect={selectVirtualTour}
+      />
       <UnionStationBookingDialog
         open={unionBookingOpen}
         onOpenChange={(open) => {
@@ -157,8 +179,7 @@ function Welcome() {
 /* ------------------------------------------------------------------ */
 /* NAV                                                                */
 /* ------------------------------------------------------------------ */
-function SiteNav() {
-  const nav = useNavigate();
+function SiteNav({ onOpenBooking }: { onOpenBooking: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <header className="sticky top-0 z-40 border-b bg-background/85 backdrop-blur-xl">
@@ -185,7 +206,7 @@ function SiteNav() {
               <LogIn className="size-3.5" /> Portal login
             </Link>
           </Button>
-          <Button size="sm" className="gap-1.5" onClick={() => nav({ to: "/tour-request" })}>
+          <Button size="sm" className="gap-1.5" onClick={onOpenBooking}>
             Book a tour <ArrowRight className="size-3.5" />
           </Button>
         </div>
@@ -212,7 +233,10 @@ function SiteNav() {
             <Button asChild variant="outline" size="sm" className="flex-1">
               <Link to="/auth/sign-in">Portal login</Link>
             </Button>
-            <Button size="sm" className="flex-1" onClick={() => nav({ to: "/tour-request" })}>
+            <Button size="sm" className="flex-1" onClick={() => {
+              setOpen(false);
+              onOpenBooking();
+            }}>
               Book a tour
             </Button>
           </div>
@@ -225,62 +249,137 @@ function SiteNav() {
 /* ------------------------------------------------------------------ */
 /* HERO — one confident frame, real tour as the second CTA             */
 /* ------------------------------------------------------------------ */
-function Hero({ onOpenTour }: { onOpenTour: (id: Tour["id"]) => void }) {
-  const nav = useNavigate();
+function Hero({
+  onOpenTourSelector,
+  onOpenBooking,
+  isOverlayOpen,
+}: {
+  onOpenTourSelector: () => void;
+  onOpenBooking: () => void;
+  isOverlayOpen: boolean;
+}) {
   const [activeSlide, setActiveSlide] = useState(0);
+  const [activeCaptionIndex, setActiveCaptionIndex] = useState(0);
+  const [soundtrackPlaying, setSoundtrackPlaying] = useState(false);
+  const soundtrackRef = useRef<HTMLAudioElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  const heroCaption = heroCaptions[activeCaptionIndex];
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setActiveSlide((current) => (current + 1) % heroSlides.length);
-    }, 6500);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(
+      () => setActiveCaptionIndex((index) => (index + 1) % heroCaptions.length),
+      6500,
+    );
     return () => window.clearInterval(timer);
   }, []);
 
-  const slide = heroSlides[activeSlide];
+  useEffect(() => {
+    if (isOverlayOpen) soundtrackRef.current?.pause();
+  }, [isOverlayOpen]);
+
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero || !("IntersectionObserver" in window)) return;
+
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) soundtrackRef.current?.pause();
+    }, { threshold: 0.1 });
+    observer.observe(hero);
+    return () => observer.disconnect();
+  }, []);
+
+  const toggleSoundtrack = async () => {
+    const audio = soundtrackRef.current;
+    if (!audio) return;
+
+    if (!audio.paused) {
+      audio.pause();
+      return;
+    }
+
+    try {
+      await audio.play();
+    } catch {
+      toast.error("Unable to play the welcome soundtrack. Please try again.");
+    }
+  };
 
   return (
-    <section className="relative overflow-hidden">
+    <section ref={heroRef} className="relative isolate overflow-hidden bg-primary text-white">
+      <audio
+        ref={soundtrackRef}
+        className="hidden"
+        src={welcomeSoundtrack}
+        loop
+        preload="none"
+        onPlay={() => setSoundtrackPlaying(true)}
+        onPause={() => setSoundtrackPlaying(false)}
+      />
       <div className="relative h-[min(78svh,680px)] min-h-[520px] max-h-[860px] w-full md:h-[88vh] md:min-h-[560px]">
-        {heroSlides.map((item, index) => (
-          <div
-            key={item.name}
-            className={`absolute inset-0 transition-opacity duration-1000 ${index === activeSlide ? "opacity-100" : "opacity-0"}`}
-            aria-hidden={index !== activeSlide}
-          >
-            <img
-              src={item.image}
-              alt={`${item.name} — ${item.tag}`}
-              className="h-full w-full object-cover"
-              loading={index === 0 ? "eager" : "lazy"}
-              fetchPriority={index === 0 ? "high" : "auto"}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/55 to-black/20" />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/65 via-transparent to-black/25" />
-          </div>
-        ))}
+        <div className="absolute inset-0 -z-20">
+          {welcomeSlides.map((item, index) => {
+            const active = index === activeSlide;
+            const className = `absolute inset-0 h-full w-full object-cover transition-[opacity,transform] duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+              active ? "scale-100 opacity-100" : "scale-[1.06] opacity-0"
+            } saturate-[1.14] contrast-[1.06]`;
 
-        <div className="relative mx-auto max-w-7xl h-full px-4 sm:px-6 flex flex-col justify-end pb-16 md:pb-24 text-white">
-          <Badge
-            variant="outline"
-            className="self-start max-w-full whitespace-normal leading-snug bg-white/10 border-white/25 text-white gap-1.5 mb-4 sm:mb-5 backdrop-blur"
-          >
-            <Sparkles className="size-3" /> Private offices &amp; meeting rooms · Johannesburg
-          </Badge>
-          <h1 className="font-display text-3xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight max-w-3xl leading-[1.02]">
-            A considered place for your team to work.
-          </h1>
+            return (
+              <video
+                key={item.src}
+                src={active ? item.src : undefined}
+                aria-label={item.alt}
+                aria-hidden={!active}
+                autoPlay={active}
+                loop
+                muted
+                playsInline
+                preload={active ? "auto" : "none"}
+                className={className}
+              />
+            );
+          })}
+        </div>
+        <div className="absolute inset-0 -z-10 bg-gradient-to-b from-black/50 via-black/35 to-black/85" />
+        <HeroVideoTreatment />
+
+        <div className="absolute right-8 top-8 z-10 flex justify-center px-3 text-center">
+          <div className="flex flex-col items-center rounded-xl bg-black/55 px-5 py-3 text-center backdrop-blur-sm ring-1 ring-white/15">
+            <BrandLogo className="mx-auto h-auto w-20 drop-shadow-lg" />
+            <p className="mt-2 font-display text-xs font-medium tracking-[0.18em] text-white/90">
+              Space that Inspire
+            </p>
+          </div>
+        </div>
+
+        <div className="relative z-10 mx-auto max-w-7xl h-full px-4 sm:px-6 flex flex-col justify-end pb-16 md:pb-24 text-white">
+          <div className="mb-3 text-[10px] font-medium uppercase tracking-[0.2em] text-white/75">
+            Johannesburg · Kyalami &amp; Rosebank
+          </div>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.h1
+              key={heroCaption}
+              initial={{ opacity: 0, y: 22, filter: "blur(10px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -16, filter: "blur(8px)" }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="font-display text-3xl sm:text-5xl md:text-5xl lg:text-7xl font-semibold tracking-tight max-w-3xl leading-[1.02] text-balance"
+            >
+              {heroCaption}
+            </motion.h1>
+          </AnimatePresence>
           <p className="mt-4 sm:mt-5 text-sm sm:text-base md:text-lg text-white/85 max-w-xl leading-relaxed">
-            {slide.copy} For company gatherings, explore the distinctive Union Station venue.
+            Private offices, meeting rooms and shared workspace — made for the way you work.
           </p>
-          <div className="mt-5 sm:mt-7 flex flex-wrap items-center gap-3">
-            <Button size="lg" className="gap-1.5" onClick={() => nav({ to: "/tour-request" })}>
+          <div className="mt-5 sm:mt-7 flex flex-wrap items-center justify-end gap-3">
+            <Button size="lg" className="gap-1.5" onClick={onOpenBooking}>
               Book a tour <ArrowRight className="size-4" />
             </Button>
             <Button
               size="lg"
               variant="outline"
               className="bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white gap-1.5"
-              onClick={() => onOpenTour(activeSlide === 0 ? "rosebank" : "kyalami")}
+              onClick={onOpenTourSelector}
             >
               <Play className="size-4" /> Virtual tour
             </Button>
@@ -293,31 +392,45 @@ function Hero({ onOpenTour }: { onOpenTour: (id: Tour["id"]) => void }) {
         </div>
 
         <button
-          aria-label="Previous slide"
-          onClick={() => setActiveSlide((activeSlide - 1 + heroSlides.length) % heroSlides.length)}
-          className="hidden md:grid absolute left-5 top-1/2 -translate-y-1/2 size-11 place-items-center rounded-full bg-white/10 border border-white/20 text-white backdrop-blur hover:bg-white/20"
+          type="button"
+          onClick={() => void toggleSoundtrack()}
+          aria-label={soundtrackPlaying ? "Mute welcome soundtrack" : "Play welcome soundtrack"}
+          aria-pressed={soundtrackPlaying}
+          title={soundtrackPlaying ? "Mute welcome soundtrack" : "Play welcome soundtrack"}
+          className="absolute left-5 top-5 z-20 grid size-11 place-items-center rounded-full border border-white/30 bg-black/35 text-white backdrop-blur transition hover:bg-black/55"
         >
-          <ChevronLeft className="size-5" />
+          {soundtrackPlaying ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
         </button>
-        <button
-          aria-label="Next slide"
-          onClick={() => setActiveSlide((activeSlide + 1) % heroSlides.length)}
-          className="hidden md:grid absolute right-5 top-1/2 -translate-y-1/2 size-11 place-items-center rounded-full bg-white/10 border border-white/20 text-white backdrop-blur hover:bg-white/20"
-        >
-          <ChevronRight className="size-5" />
-        </button>
-
-        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2">
-          {heroSlides.map((item, index) => (
+        {welcomeSlides.length > 1 && (
+          <>
             <button
-              key={item.name}
-              aria-label={`Show ${item.name} slide`}
-              aria-current={index === activeSlide}
-              onClick={() => setActiveSlide(index)}
-              className={`h-1.5 rounded-full transition-all ${index === activeSlide ? "w-8 bg-white" : "w-3 bg-white/40 hover:bg-white/70"}`}
-            />
-          ))}
-        </div>
+              aria-label="Previous slide"
+              onClick={() => setActiveSlide((activeSlide - 1 + welcomeSlides.length) % welcomeSlides.length)}
+              className="hidden md:grid absolute left-5 top-1/2 -translate-y-1/2 size-11 place-items-center rounded-full bg-white/10 border border-white/20 text-white backdrop-blur hover:bg-white/20"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              aria-label="Next slide"
+              onClick={() => setActiveSlide((activeSlide + 1) % welcomeSlides.length)}
+              className="hidden md:grid absolute right-5 top-1/2 -translate-y-1/2 size-11 place-items-center rounded-full bg-white/10 border border-white/20 text-white backdrop-blur hover:bg-white/20"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2">
+              {welcomeSlides.map((item, index) => (
+                <button
+                  key={item.src}
+                  aria-label={`Show hero slide ${index + 1} of ${welcomeSlides.length}`}
+                  aria-pressed={index === activeSlide}
+                  onClick={() => setActiveSlide(index)}
+                  className={`h-1.5 rounded-full transition-all ${index === activeSlide ? "w-8 bg-white" : "w-3 bg-white/40 hover:bg-white/70"}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
@@ -680,12 +793,13 @@ function FAQ() {
 /* ------------------------------------------------------------------ */
 /* BOOKING — split into "Book a tour" vs "Request a space"            */
 /* ------------------------------------------------------------------ */
-function BookingSection({ open, onOpenChange, onOpenBooking, initialBranch, initialTab }: {
+function BookingSection({ open, onOpenChange, onOpenBooking, initialBranch, initialTab, sectionClassName = "" }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenBooking: (branch: string, tab: BookingTab) => void;
   initialBranch: string;
   initialTab: BookingTab;
+  sectionClassName?: string;
 }) {
   const live = branches.filter((b) => b.status === "live");
 
@@ -859,7 +973,7 @@ function BookingSection({ open, onOpenChange, onOpenBooking, initialBranch, init
 
   return (
     <>
-      <section id="book" className="border-b py-10 md:py-14">
+      <section id="book" className={`${sectionClassName} border-b py-10 md:py-14`}>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 px-4 sm:px-6">
           <div>
             <h2 className="font-display text-2xl font-semibold">Book a visit or request a space</h2>
@@ -876,12 +990,12 @@ function BookingSection({ open, onOpenChange, onOpenBooking, initialBranch, init
           <DialogHeader className="border-b px-5 py-4 pr-12 text-left sm:px-7">
             <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-brand">Office &amp; Co · {activeTab === "tour" ? "Visit" : "Space request"}</div>
             <DialogTitle className="mt-1 font-display text-xl sm:text-2xl">
-              {activeTab === "tour" ? "Book a visit at" : "Request a space at"} {activeTab === "tour" ? tourBranch : spaceBranch}
+              {activeTab === "tour" ? "Book a visit" : "Request a space"}
             </DialogTitle>
             <DialogDescription>
               {activeTab === "tour"
-                ? "Choose a preferred time for a guided visit. The branch team will confirm your request."
-                : "Share your requirements and the branch team will confirm availability and pricing."}
+                ? "Choose a branch and preferred time for a guided visit. The branch team will confirm your request."
+                : "Choose a branch and share your requirements. The branch team will confirm availability and pricing."}
             </DialogDescription>
           </DialogHeader>
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as BookingTab)} className="flex min-h-0 flex-1 flex-col">

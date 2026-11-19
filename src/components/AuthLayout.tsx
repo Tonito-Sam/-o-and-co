@@ -46,6 +46,15 @@ export function AuthLayout({
       {/* Form panel */}
       <div className="flex flex-col justify-center px-6 sm:px-12 py-12">
         <div className="mx-auto w-full max-w-md">
+          <Link to="/welcome" className="mb-8 inline-flex items-center gap-3 lg:hidden">
+            <span className="grid size-12 place-items-center rounded-xl bg-primary shadow-sm">
+              <BrandLogo className="size-8 object-contain" />
+            </span>
+            <span className="leading-tight">
+              <span className="block font-display text-sm font-semibold">Office &amp; Co</span>
+              <span className="mt-1 block text-xs text-muted-foreground">Space that Inspire</span>
+            </span>
+          </Link>
           {eyebrow && <div className="text-[11px] uppercase tracking-[0.18em] text-brand font-medium mb-2">{eyebrow}</div>}
           <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight">{title}</h1>
           {subtitle && <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>}

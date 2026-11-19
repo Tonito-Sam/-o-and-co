@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { VirtualTour } from "@/components/VirtualTour";
 import { tours } from "@/lib/tours";
+import { requestTourLandscape } from "@/lib/tour-orientation";
 import { getSupabaseClient } from "@/lib/supabase";
 import { useRole } from "@/lib/role-context";
 
@@ -382,7 +383,10 @@ export function UnionStationBookingDialog({ open, onOpenChange, onSubmitted }: U
                   </div>
                 ))}
               </div>
-              <Button className="mt-4 gap-2" onClick={() => setVirtualTourOpen(true)}><Play className="size-4" />Start interactive tour</Button>
+              <Button className="mt-4 gap-2" onClick={() => {
+                requestTourLandscape();
+                setVirtualTourOpen(true);
+              }}><Play className="size-4" />Start interactive tour</Button>
             </TabsContent>
 
             <TabsContent value="visit" className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-7">

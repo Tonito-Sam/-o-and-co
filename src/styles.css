@@ -273,6 +273,58 @@
   }
 }
 
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+  .virtual-tour-dialog {
+    position: fixed !important;
+    inset: 0 !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-width: none !important;
+    transform: none !important;
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+    border-radius: 0 !important;
+  }
+
+  .virtual-tour-layout {
+    height: 100% !important;
+    max-height: none !important;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  }
+
+  .virtual-tour-stage,
+  .virtual-tour-sidebar {
+    min-width: 0;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .virtual-tour-layout {
+    grid-template-columns: minmax(0, 1fr) 230px;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .virtual-tour-space-list {
+    flex-direction: column;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .virtual-tour-space-option {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .virtual-tour-rotate-hint {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .organization-workspace main > div {
     animation: organization-workspace-enter 360ms cubic-bezier(0.2, 0.75, 0.25, 1) both;

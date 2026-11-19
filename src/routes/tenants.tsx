@@ -45,6 +45,7 @@ type TenantRow = {
   organization_id: string | null;
   company_id: string | null;
   branch_id: string;
+  office_number: string | null;
   tier: string | null;
   plan_name: string | null;
   desks: number | null;
@@ -270,7 +271,7 @@ function Tenants() {
 
       let tenantQuery = supabase
         .from("tenants")
-        .select("id,organization_id,company_id,branch_id,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)")
+        .select("id,organization_id,company_id,branch_id,office_number,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)")
         .eq("status", "active")
         .order("since", { ascending: false });
       if (isBranchManager) tenantQuery = tenantQuery.in("branch_id", allowedBranchIds);
@@ -300,7 +301,7 @@ function Tenants() {
       const organization = one(tenant.organizations);
       const company = one(tenant.companies);
       const branch = one(tenant.branches);
-      return [organization?.name, company?.name, organization?.industry, organization?.website, branch?.name, tenant.plan_name]
+      return [organization?.name, company?.name, organization?.industry, organization?.website, branch?.name, tenant.plan_name, tenant.office_number]
         .some((value) => value?.toLowerCase().includes(query));
     });
   }, [branchTenants, search]);
@@ -328,7 +329,7 @@ function Tenants() {
     toast.success("Existing tenant imported and linked.");
     setImportDialogOpen(false); setLegacyName(""); resetLeaseForm();
 
-    let reloadQuery = supabase.from("tenants").select("id,organization_id,company_id,branch_id,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)").eq("status", "active").order("since", { ascending: false });
+    let reloadQuery = supabase.from("tenants").select("id,organization_id,company_id,branch_id,office_number,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)").eq("status", "active").order("since", { ascending: false });
     if (isBranchManager) reloadQuery = reloadQuery.in("branch_id", branches.map((item) => item.id));
     const { data, error: reloadError } = await reloadQuery;
     if (reloadError) toast.error(reloadError.message);
@@ -387,7 +388,7 @@ function Tenants() {
     setCsvErrors(errors);
     toast.success(`${result.imported} tenant${result.imported === 1 ? "" : "s"} imported${errors.length ? ` · ${errors.length} need attention` : ""}.`);
 
-    let reloadQuery = supabase.from("tenants").select("id,organization_id,company_id,branch_id,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)").eq("status", "active").order("since", { ascending: false });
+    let reloadQuery = supabase.from("tenants").select("id,organization_id,company_id,branch_id,office_number,tier,plan_name,desks,mrr_zar,since,lease_signed_at,status,organizations(name,industry,website),companies(name),branches(name)").eq("status", "active").order("since", { ascending: false });
     if (isBranchManager) reloadQuery = reloadQuery.in("branch_id", branches.map((item) => item.id));
     const { data: tenantData, error: reloadError } = await reloadQuery;
     if (reloadError) toast.error(reloadError.message);
@@ -505,11 +506,12 @@ function Tenants() {
           /* --- LIST VIEW --- */
           <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left text-sm">
+              <table className="w-full min-w-[1020px] text-left text-sm">
                 <thead className="border-b bg-muted/40 text-xs font-medium text-muted-foreground">
                   <tr>
                     <th className="px-6 py-4">Organization</th>
                     <th className="px-6 py-4">Branch</th>
+                    <th className="px-6 py-4">Office / Room</th>
                     <th className="px-6 py-4">Plan</th>
                     <th className="px-6 py-4 text-right">Monthly Fee</th>
                     <th className="px-6 py-4 text-right">Lease Start</th>
@@ -554,6 +556,7 @@ function Tenants() {
                             <Building2 className="size-3.5 opacity-70" /> {branch?.name ?? "Unassigned"}
                           </div>
                         </td>
+                        <td className="px-6 py-4 font-medium tabular-nums">{tenant.office_number || "—"}</td>
                         <td className="px-6 py-4"><span className="capitalize text-muted-foreground">{tenant.plan_name || tenant.tier?.replace('_', ' ') || "Standard"}</span></td>
                         <td className="px-6 py-4 text-right font-medium tabular-nums">R {new Intl.NumberFormat("en-ZA").format(tenant.mrr_zar ?? 0)}</td>
                         <td className="px-6 py-4 text-right text-muted-foreground tabular-nums">
@@ -624,6 +627,9 @@ function Tenants() {
                   <div className="mt-4 flex items-center gap-2 border-t pt-4">
                     <Building2 className="size-4 text-muted-foreground" />
                     <span className="text-xs font-medium text-muted-foreground">{branch?.name ?? "Branch not set"}</span>
+                    <span className="ml-auto rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                      Office {tenant.office_number || "not assigned"}
+                    </span>
                   </div>
                 </div>
               );
