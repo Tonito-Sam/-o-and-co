@@ -16,8 +16,10 @@ import {
 } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
+import { BranchContactCards } from "@/components/welcome/BranchContactCards";
+import { WhyOfficeAndCo } from "@/components/welcome/WhyOfficeAndCo";
 import { branches } from "@/lib/mock";
-import { getTourPhotoCount, tours, type Tour } from "@/lib/tours";
+import { tours, type Tour } from "@/lib/tours";
 import { toast } from "sonner";
 import { heroCaptions, welcomeSlides } from "@/components/welcome/hero-media";
 import { HeroVideoTreatment } from "@/components/welcome/HeroVideoTreatment";
@@ -64,25 +66,6 @@ export function MobileHome({
   const liveBranches = branches.filter(
     (branch) => branch.status === "live" && (branch.name === "Kyalami" || branch.name === "Rosebank"),
   );
-  const workspaceTours = Object.values(tours).filter((tour) => tour.id !== "union-station");
-  const stats = [
-    { value: String(workspaceTours.length), label: "Johannesburg branches" },
-    {
-      value: String(workspaceTours.reduce(
-        (count, tour) => count + tour.spaces.filter((space) => space.category === "office").length,
-        0,
-      )),
-      label: "private offices",
-    },
-    {
-      value: String(getTourPhotoCount()),
-      label: "real-space tour photos",
-    },
-    {
-      value: tours["union-station"].spaces.find((space) => space.id === "us-grand-hall")?.capacity?.match(/\d+/)?.[0] ?? "120",
-      label: "event guests",
-    },
-  ];
   const heroCaption = heroCaptions[activeCaptionIndex];
 
   const openBooking = (branch: string, tab: BookingTab) => {
@@ -163,7 +146,7 @@ export function MobileHome({
           </span>
           <span className="leading-tight">
             <span className="block font-display text-sm font-semibold">Office &amp; Co</span>
-            <span className="block text-xs text-muted-foreground">Spaces That Inspire</span>
+            <span className="block text-xs text-muted-foreground">Spaces that Inspire</span>
           </span>
         </div>
       </header>
@@ -220,7 +203,7 @@ export function MobileHome({
           <div className="rounded-xl bg-black/55 px-5 py-3 backdrop-blur-sm ring-1 ring-white/15">
             <BrandLogo className="mx-auto h-auto w-20 drop-shadow-lg" />
             <p className="mt-2 font-display text-xs font-medium tracking-[0.18em] text-white/90">
-              Space that Inspire
+              Spaces that Inspire
             </p>
           </div>
         </div>
@@ -428,17 +411,11 @@ export function MobileHome({
         </div>
       </section>
 
-      <section className="px-5 py-8">
-        <h2 className="mb-4 font-display text-xl font-semibold">Spaces that work for you</h2>
-        <div className="grid grid-cols-2 gap-2.5">
-          {stats.map((stat) => (
-            <div key={stat.label} className="card-soft rounded-xl p-4">
-              <div className="font-display text-3xl font-semibold">{stat.value}</div>
-              <div className="mt-1 text-xs text-muted-foreground">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <WhyOfficeAndCo
+        sectionId="mobile-proof"
+        locationsHref="#mobile-locations"
+        onOpenTourSelector={onOpenTourSelector}
+      />
 
       <section className="border-y bg-muted/30 px-5 py-9">
         <div className="mb-4">
@@ -462,9 +439,10 @@ export function MobileHome({
           <BrandLogo className="h-auto w-9 rounded bg-primary p-1.5" />
           <div>
             <div className="font-display text-sm font-semibold">Office &amp; Co</div>
-            <div className="text-xs text-muted-foreground">Spaces That Inspire</div>
+            <div className="text-xs text-muted-foreground">Spaces that Inspire</div>
           </div>
         </div>
+        <BranchContactCards className="mt-5 grid gap-5 rounded-xl border p-4 sm:grid-cols-2" />
         <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
           <a href="#mobile-locations" className="underline-offset-4 hover:underline">Locations</a>
           <a href="#mobile-events" className="underline-offset-4 hover:underline">Events</a>

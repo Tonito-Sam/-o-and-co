@@ -106,7 +106,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:image", content: "https://app.officeandco.co.za/officeandco-og.png" },
       { property: "og:image:width", content: "1200" },
       { property: "og:image:height", content: "630" },
-      { property: "og:image:alt", content: "Office & Co logo on a dark background" },
+      { property: "og:image:alt", content: "Office & Co logo on a charcoal background" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: "https://app.officeandco.co.za/officeandco-og.png" },
     ],

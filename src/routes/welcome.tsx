@@ -21,6 +21,8 @@ import { MobileHome } from "@/components/welcome/MobileHome";
 import { HeroVideoTreatment } from "@/components/welcome/HeroVideoTreatment";
 import { VirtualTour } from "@/components/VirtualTour";
 import { VirtualTourSelector } from "@/components/VirtualTourSelector";
+import { BranchContactCards } from "@/components/welcome/BranchContactCards";
+import { WhyOfficeAndCo } from "@/components/welcome/WhyOfficeAndCo";
 import bryanstonImg from "@/assets/space-bryanston.jpg";
 import { heroCaptions, welcomeSlides } from "@/components/welcome/hero-media";
 import {
@@ -33,7 +35,7 @@ import {
 import { branches } from "@/lib/mock";
 import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
-import { getTourPhotoCount, tours, type Tour } from "@/lib/tours";
+import { tours, type Tour } from "@/lib/tours";
 import { requestTourLandscape } from "@/lib/tour-orientation";
 import welcomeSoundtrack from "../../welcomemedia/soundtracks/Aylex - Daydreams (freetouse.com).mp3";
 
@@ -120,7 +122,11 @@ function Welcome() {
           onOpenTour={() => openTour("union-station")}
           onOpenBooking={() => setUnionBookingOpen(true)}
         />
-        <Proof />
+        <WhyOfficeAndCo
+          sectionId="proof"
+          locationsHref="#locations"
+          onOpenTourSelector={() => setTourSelectorOpen(true)}
+        />
         <FAQ />
       </div>
       <BookingSection
@@ -347,7 +353,7 @@ function Hero({
           <div className="flex flex-col items-center rounded-xl bg-black/55 px-5 py-3 text-center backdrop-blur-sm ring-1 ring-white/15">
             <BrandLogo className="mx-auto h-auto w-20 drop-shadow-lg" />
             <p className="mt-2 font-display text-xs font-medium tracking-[0.18em] text-white/90">
-              Space that Inspire
+              Spaces that Inspire
             </p>
           </div>
         </div>
@@ -677,56 +683,6 @@ function UnionStationFeature({ onOpenTour, onOpenBooking }: { onOpenTour: () => 
                 loading="lazy"
                 className="h-full w-full object-cover"
               />
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* PROOF — facts, not fake members                                     */
-/* ------------------------------------------------------------------ */
-function Proof() {
-  const workspaceTours = Object.values(tours).filter((tour) => tour.id !== "union-station");
-  const officeCount = workspaceTours.reduce(
-    (count, tour) => count + tour.spaces.filter((space) => space.category === "office").length,
-    0,
-  );
-  const eventCapacity = tours["union-station"].spaces.find((space) => space.id === "us-grand-hall")?.capacity?.match(/\d+/)?.[0] ?? "120";
-  const facts = [
-    { k: String(workspaceTours.length), l: "Johannesburg workspace locations" },
-    { k: String(officeCount), l: "private offices featured in virtual tours" },
-    { k: String(getTourPhotoCount()), l: "real-space photos across the tours" },
-    { k: eventCapacity, l: "guest capacity at Union Station's Grand Hall" },
-  ];
-  return (
-    <section id="proof" className="py-16 md:py-24 bg-muted/30 border-y">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-brand font-medium mb-2">
-              Why Office &amp; Co
-            </div>
-            <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">
-              Room to focus. Space to bring people together.
-            </h2>
-            <p className="mt-4 text-muted-foreground leading-relaxed">
-              Private offices and meeting rooms in Kyalami and Rosebank, with Union Station for company gatherings and events.
-            </p>
-            <Button asChild className="mt-6 gap-2">
-              <a href="#locations">
-                Explore the branches <ArrowRight className="size-4" />
-              </a>
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {facts.map((f) => (
-              <div key={f.l} className="card-soft p-6">
-                <div className="font-display text-4xl font-semibold">{f.k}</div>
-                <div className="text-sm text-muted-foreground mt-1">{f.l}</div>
-              </div>
             ))}
           </div>
         </div>
@@ -1185,7 +1141,7 @@ function FinalCTA({ onOpenBooking }: { onOpenBooking: () => void }) {
 function Footer() {
   return (
     <footer className="border-t py-12 text-sm">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 grid sm:grid-cols-2 md:grid-cols-4 gap-8">
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-5">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="grid size-8 place-items-center rounded-md bg-primary">
@@ -1197,8 +1153,8 @@ function Footer() {
             Private offices and meeting rooms in Kyalami and Rosebank. Union Station for corporate events.
           </p>
         </div>
+        <BranchContactCards className="grid gap-6 sm:grid-cols-2 lg:col-span-2" />
         {[
-          { t: "Branches", l: ["Kyalami", "Rosebank", "Union Station"] },
           { t: "Company", l: ["About", "Careers", "Press", "Contact"] },
           { t: "Legal", l: ["Terms", "Privacy (POPIA)", "Security", "Cookies"] },
         ].map((c) => (

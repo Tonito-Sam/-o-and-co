@@ -9,5 +9,5 @@ export const welcomeSlides: WelcomeSlide[] = [
 export const heroCaptions = [
   "A considered place for your team to work.",
   "We make room for people who make room for others",
-  "Space that Inspire",
+  "Spaces that Inspire",
 ] as const;

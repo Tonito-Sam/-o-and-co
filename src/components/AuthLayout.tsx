@@ -52,7 +52,7 @@ export function AuthLayout({
             </span>
             <span className="leading-tight">
               <span className="block font-display text-sm font-semibold">Office &amp; Co</span>
-              <span className="mt-1 block text-xs text-muted-foreground">Space that Inspire</span>
+              <span className="mt-1 block text-xs text-muted-foreground">Spaces that Inspire</span>
             </span>
           </Link>
           {eyebrow && <div className="text-[11px] uppercase tracking-[0.18em] text-brand font-medium mb-2">{eyebrow}</div>}

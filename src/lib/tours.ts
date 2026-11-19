@@ -293,15 +293,3 @@ export const tours: Record<Tour["id"], Tour> = {
   rosebank,
   "union-station": unionStation,
 };
-
-export function getTourPhotoCount(): number {
-  const imageUrls = new Set<string>();
-  for (const tour of Object.values(tours)) {
-    imageUrls.add(tour.coverImage);
-    for (const space of tour.spaces) {
-      imageUrls.add(space.image);
-      for (const image of space.images ?? []) imageUrls.add(image);
-    }
-  }
-  return imageUrls.size;
-}

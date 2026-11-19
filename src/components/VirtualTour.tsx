@@ -107,7 +107,7 @@ export function VirtualTour({
       ...tour.spaces,
       {
         id: `${tour.id}-closing-frame`,
-        name: "Spaces That Inspire",
+        name: "Spaces that Inspire",
         category: "workspace",
         description: `Thank you for exploring ${tour.branchName}.`,
         image: tour.coverImage,
@@ -292,7 +292,7 @@ export function VirtualTour({
             <div className="relative rounded-3xl border border-white/15 bg-black/25 px-8 py-10 shadow-2xl backdrop-blur-md sm:px-14 sm:py-12">
               <BrandLogo className="mx-auto h-auto w-32 drop-shadow-xl sm:w-40" />
               <p className="mt-6 font-display text-xl font-medium tracking-[0.2em] text-white sm:text-2xl">
-                Spaces That Inspire
+                Spaces that Inspire
               </p>
               <p className="mt-3 text-sm text-white/65">{tour.branchName} · Office &amp; Co</p>
             </div>
