@@ -103,6 +103,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Enterprise operating system for coworking and serviced offices.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "https://app.officeandco.co.za/officeandco-og.png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:alt", content: "Office & Co logo on a dark background" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "https://app.officeandco.co.za/officeandco-og.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
@@ -135,6 +141,7 @@ function isPublicRoute(pathname: string) {
     pathname === "/welcome" ||
     pathname.startsWith("/welcome/") ||
     pathname.startsWith("/checkin") ||
+    pathname.startsWith("/virtual-tour/") ||
     pathname === "/union-station" ||
     pathname === "/tour-calendar" ||
     pathname === "/tour-request"
@@ -152,8 +159,13 @@ function RootComponent() {
     const tabletQuery = window.matchMedia("(min-width: 768px) and (max-width: 1024px)");
     const syncTabletSidebar = () => setSidebarOpen(!tabletQuery.matches);
     syncTabletSidebar();
-    tabletQuery.addEventListener("change", syncTabletSidebar);
-    return () => tabletQuery.removeEventListener("change", syncTabletSidebar);
+    if (typeof tabletQuery.addEventListener === "function") {
+      tabletQuery.addEventListener("change", syncTabletSidebar);
+      return () => tabletQuery.removeEventListener("change", syncTabletSidebar);
+    }
+
+    tabletQuery.addListener(syncTabletSidebar);
+    return () => tabletQuery.removeListener(syncTabletSidebar);
   }, []);
 
   return (

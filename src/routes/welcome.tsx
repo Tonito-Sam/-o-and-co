@@ -33,7 +33,7 @@ import {
 import { branches } from "@/lib/mock";
 import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
-import { tours, type Tour } from "@/lib/tours";
+import { getTourPhotoCount, tours, type Tour } from "@/lib/tours";
 import { requestTourLandscape } from "@/lib/tour-orientation";
 import welcomeSoundtrack from "../../welcomemedia/soundtracks/Aylex - Daydreams (freetouse.com).mp3";
 
@@ -694,16 +694,12 @@ function Proof() {
     (count, tour) => count + tour.spaces.filter((space) => space.category === "office").length,
     0,
   );
-  const meetingCount = workspaceTours.reduce(
-    (count, tour) => count + tour.spaces.filter((space) => space.category === "meeting").length,
-    0,
-  );
   const eventCapacity = tours["union-station"].spaces.find((space) => space.id === "us-grand-hall")?.capacity?.match(/\d+/)?.[0] ?? "120";
   const facts = [
-    { k: String(workspaceTours.length), l: "Johannesburg workspace branches" },
-    { k: String(officeCount), l: "Private offices shown in the tours" },
-    { k: String(meetingCount), l: "Meeting rooms shown in the tours" },
-    { k: eventCapacity, l: "Grand Hall event capacity" },
+    { k: String(workspaceTours.length), l: "Johannesburg workspace locations" },
+    { k: String(officeCount), l: "private offices featured in virtual tours" },
+    { k: String(getTourPhotoCount()), l: "real-space photos across the tours" },
+    { k: eventCapacity, l: "guest capacity at Union Station's Grand Hall" },
   ];
   return (
     <section id="proof" className="py-16 md:py-24 bg-muted/30 border-y">
@@ -714,10 +710,10 @@ function Proof() {
               Why Office &amp; Co
             </div>
             <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">
-              A workspace that works, and a venue that hosts.
+              Room to focus. Space to bring people together.
             </h2>
             <p className="mt-4 text-muted-foreground leading-relaxed">
-              Real rooms, real capacity, real venues — take a look and visit before you decide.
+              Private offices and meeting rooms in Kyalami and Rosebank, with Union Station for company gatherings and events.
             </p>
             <Button asChild className="mt-6 gap-2">
               <a href="#locations">

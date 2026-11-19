@@ -17,7 +17,7 @@ import {
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { branches } from "@/lib/mock";
-import { tours, type Tour } from "@/lib/tours";
+import { getTourPhotoCount, tours, type Tour } from "@/lib/tours";
 import { toast } from "sonner";
 import { heroCaptions, welcomeSlides } from "@/components/welcome/hero-media";
 import { HeroVideoTreatment } from "@/components/welcome/HeroVideoTreatment";
@@ -75,11 +75,8 @@ export function MobileHome({
       label: "private offices",
     },
     {
-      value: String(workspaceTours.reduce(
-        (count, tour) => count + tour.spaces.filter((space) => space.category === "meeting").length,
-        0,
-      )),
-      label: "meeting rooms",
+      value: String(getTourPhotoCount()),
+      label: "real-space tour photos",
     },
     {
       value: tours["union-station"].spaces.find((space) => space.id === "us-grand-hall")?.capacity?.match(/\d+/)?.[0] ?? "120",

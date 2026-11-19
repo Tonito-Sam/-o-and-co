@@ -18,8 +18,21 @@ function preloadTourImage(src: string): Promise<void> {
   if (cachedImage) return cachedImage;
 
   const image = new Image();
-  image.src = src;
-  const decoding = image.decode().catch((error: unknown) => {
+  const loading = new Promise<void>((resolve, reject) => {
+    const finishLoading = () => {
+      if (typeof image.decode !== "function") {
+        resolve();
+        return;
+      }
+      void image.decode().then(resolve, reject);
+    };
+
+    image.onload = finishLoading;
+    image.onerror = () => reject(new Error(`Unable to load tour image: ${src}`));
+    image.src = src;
+    if (image.complete && image.naturalWidth > 0) finishLoading();
+  });
+  const decoding = loading.catch((error: unknown) => {
     decodedTourImages.delete(src);
     throw error;
   });

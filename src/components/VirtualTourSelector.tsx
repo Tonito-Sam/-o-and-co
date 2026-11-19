@@ -19,7 +19,7 @@ export function VirtualTourSelector({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl border-white/10 bg-zinc-950 p-5 text-white sm:p-8">
+      <DialogContent className="max-h-[85dvh] w-[calc(100vw-2rem)] max-w-5xl overflow-y-auto border-white/10 bg-zinc-950 p-5 text-white sm:p-8">
         <DialogHeader className="mb-2">
           <DialogTitle className="font-display text-2xl">Choose a virtual tour</DialogTitle>
           <DialogDescription className="text-white/65">
