@@ -39,6 +39,13 @@ const GLOBAL_BRANCH_ROLES = new Set<RoleId>([
   "crm-manager",
   "sales-manager",
 ]);
+const FACILITY_ROLES = new Set<RoleId>([
+  "superadmin",
+  "group-admin",
+  "group-ceo",
+  "finance",
+  "branch-manager",
+]);
 
 const urlToKey = new Map<string, CommunityModuleKey>(COMMUNITY_MODULES.map((m) => [m.url, m.key]));
 const organizationRouteSections: Record<string, string[]> = {
@@ -371,6 +378,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       const path = url.split("?")[0];
       if (path === "/notifications") return false;
       if (path === "/content") return true;
+      if (path === "/facilities") return FACILITY_ROLES.has(role.id) && role.nav.includes(path);
       if (
         ["tenant-admin", "organization-admin", "organization-member"].includes(role.id) &&
         ["/facilities", "/events"].includes(path)

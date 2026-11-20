@@ -4,13 +4,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PasswordInput } from "@/components/PasswordInput";
 import { useState } from "react";
 import { toast } from "sonner";
 import { getSupabaseClient } from "@/lib/supabase";
 
 export const Route = createFileRoute("/auth/sign-in")({
   head: () => ({ meta: [{ title: "Sign in — Office & Co WorkspaceOS" }] }),
-  validateSearch: (search: Record<string, unknown>): { returnTo?: "/union-station" | "welcome-union-station" } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { returnTo?: "/union-station" | "welcome-union-station" } => ({
     ...(search.returnTo === "/union-station" || search.returnTo === "welcome-union-station"
       ? { returnTo: search.returnTo }
       : {}),
@@ -29,7 +32,9 @@ function SignIn() {
     e.preventDefault();
     const supabase = getSupabaseClient();
     if (!supabase) {
-      toast.error("Authentication is not configured. Add the Supabase URL and anon key to the environment.");
+      toast.error(
+        "Authentication is not configured. Add the Supabase URL and anon key to the environment.",
+      );
       return;
     }
 
@@ -54,26 +59,53 @@ function SignIn() {
       eyebrow="Sign in"
       title="Welcome back."
       subtitle="Continue to your WorkspaceOS dashboard."
-      footer={<>Don't have an account? <Link to="/auth/sign-up" className="text-brand font-medium hover:underline">Create one</Link></>}
+      footer={
+        <>
+          Don't have an account?{" "}
+          <Link to="/auth/sign-up" className="text-brand font-medium hover:underline">
+            Create one
+          </Link>
+        </>
+      }
     >
       <form onSubmit={submit} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="email">Work email</Label>
-          <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </div>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Password</Label>
-            <Link to="/auth/forgot-password" className="text-xs text-brand hover:underline">Forgot password?</Link>
+            <Link to="/auth/forgot-password" className="text-xs text-brand hover:underline">
+              Forgot password?
+            </Link>
           </div>
-          <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
         </div>
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox defaultChecked /> Remember me on this device
         </label>
-        <Button type="submit" className="w-full" disabled={loading}>{loading ? "Signing in…" : "Sign in"}</Button>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? "Signing in…" : "Sign in"}
+        </Button>
         <div className="text-center text-xs text-muted-foreground">
-          Enterprise? <Link to="/auth/sso" className="text-brand hover:underline">Sign in with SSO</Link>
+          Enterprise?{" "}
+          <Link to="/auth/sso" className="text-brand hover:underline">
+            Sign in with SSO
+          </Link>
         </div>
       </form>
     </AuthLayout>

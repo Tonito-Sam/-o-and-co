@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DoorOpen, RefreshCw, Search } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
+import { FacilitySpaceGallery } from "@/components/facilities/FacilitySpaceGallery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/facilities")({
   component: Facilities,
 });
 
-type Branch = { id: string; name: string; status: string };
+type Branch = { id: string; name: string; slug: string; status: string };
 type FacilityRecord = {
   id: string;
   branch_id: string;
@@ -31,8 +32,20 @@ type FacilityRecord = {
 function Facilities() {
   const { role, isLoading } = useRole();
   const navigate = useNavigate();
-  const isTenant = ["tenant-admin", "organization-admin", "organization-member"].includes(role.id);
+  const canViewFacilities = [
+    "superadmin",
+    "group-admin",
+    "group-ceo",
+    "finance",
+    "branch-manager",
+  ].includes(role.id);
   const isBranchManager = role.id === "branch-manager";
+  const isGlobalFacilitiesManager = [
+    "superadmin",
+    "group-admin",
+    "group-ceo",
+    "finance",
+  ].includes(role.id);
   const assignedBranchIds = useMemo(
     () => isBranchManager ? role.branchIds ?? [] : [],
     [isBranchManager, role.branchIds],
@@ -48,11 +61,11 @@ function Facilities() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
-    if (!isLoading && isTenant) void navigate({ to: "/", replace: true });
-  }, [isLoading, isTenant, navigate]);
+    if (!isLoading && !canViewFacilities) void navigate({ to: "/", replace: true });
+  }, [canViewFacilities, isLoading, navigate]);
 
   const loadFacilities = useCallback(async () => {
-    if (isLoading || isTenant) {
+    if (isLoading || !canViewFacilities) {
       setLoading(false);
       return;
     }
@@ -63,7 +76,7 @@ function Facilities() {
       return;
     }
     setLoading(true);
-    const branchResult = await supabase.from("branches").select("id,name,status").order("name");
+    const branchResult = await supabase.from("branches").select("id,name,slug,status").order("name");
     if (branchResult.error) {
       setError(branchResult.error.message);
       setBranches([]);
@@ -187,7 +200,7 @@ function Facilities() {
     setFacilities(portfolioInventory.filter((item) => item.branch_name) as FacilityRecord[]);
     setError("");
     setLoading(false);
-  }, [assignedBranchIds, assignedBranchNames, isBranchManager, isLoading, isTenant]);
+  }, [assignedBranchIds, assignedBranchNames, canViewFacilities, isBranchManager, isLoading]);
 
   useEffect(() => {
     void loadFacilities();
@@ -223,8 +236,8 @@ function Facilities() {
   const availableEquipment = equipmentUnits.reduce((sum, item) => sum + (item.available_quantity ?? 0), 0);
   const totalEquipment = equipmentUnits.reduce((sum, item) => sum + (item.quantity ?? 0), 0);
   const branchNameById = new Map(branches.map((branch) => [branch.id, branch.name]));
-  const showBranchContext = role.id === "group-ceo" || (isBranchManager && branches.length > 1);
-  const portfolioDescription = role.id === "group-ceo"
+  const showBranchContext = isGlobalFacilitiesManager || (isBranchManager && branches.length > 1);
+  const portfolioDescription = isGlobalFacilitiesManager
     ? "Live facility, office, meeting-room, parking, and equipment records across branches."
     : isBranchManager
       ? branches.length > 1
@@ -232,19 +245,19 @@ function Facilities() {
         : `Live facility and office-space inventory for ${branches[0]?.name ?? role.branch ?? "your assigned branch"}.`
       : "Live office and desk inventory for your assigned branch.";
 
-  if (isLoading || isTenant) return null;
+  if (isLoading || !canViewFacilities) return null;
 
   return (
     <div className="mx-auto max-w-350 space-y-5">
       <PageHeader
         eyebrow={
-          role.id === "group-ceo"
+          isGlobalFacilitiesManager
             ? "Group Operations · Facilities"
             : isBranchManager
               ? "Branch Operations · Portfolio"
               : "Branch Operations · Facilities"
         }
-        title={role.id === "group-ceo" || isBranchManager ? "Portfolio facilities" : "Facilities"}
+        title={isGlobalFacilitiesManager || isBranchManager ? "Portfolio facilities" : "Facilities"}
         description={portfolioDescription}
         actions={
           <Button
@@ -266,6 +279,36 @@ function Facilities() {
           Facilities unavailable: {error}
         </p>
       ) : null}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {showBranchContext && branches.length > 1 ? (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Facility branches">
+            {[
+              { id: "all", name: isBranchManager ? "All assigned branches" : "All branches" },
+              ...branches,
+            ].map((branch) => (
+              <Button
+                key={branch.id}
+                aria-pressed={branchFilter === branch.id}
+                variant={branchFilter === branch.id ? "default" : "outline"}
+                size="sm"
+                onClick={() => setBranchFilter(branch.id)}
+              >
+                {branch.name}
+              </Button>
+            ))}
+          </div>
+        ) : <span />}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search spaces"
+            className="h-9 w-48 pl-8"
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
@@ -292,6 +335,12 @@ function Facilities() {
         />
       </div>
 
+      <FacilitySpaceGallery
+        branches={branches}
+        branchFilter={branchFilter}
+        search={search}
+      />
+
       <section className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
           <div>
@@ -299,32 +348,6 @@ function Facilities() {
             <p className="mt-1 text-xs text-muted-foreground">
               Live spaces, rooms, parking, equipment, and monthly lease values.
             </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {showBranchContext ? (
-              <select
-                aria-label="Filter by branch"
-                value={branchFilter}
-                onChange={(event) => setBranchFilter(event.target.value)}
-                className="h-9 rounded-md border bg-background px-3 text-sm"
-              >
-                <option value="all">{isBranchManager ? "All assigned branches" : "All branches"}</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search spaces"
-                className="h-9 w-48 pl-8"
-              />
-            </div>
           </div>
         </div>
         {loading ? (

@@ -1,4 +1,4 @@
-import welcomeKyalamiVideo from "../../../welcomemedia/office_co_kyalami_timelapse_loop.mp4";
+import welcomeKyalamiVideo from "../../../welcomemedia/office_co_kyalami_timelapse_loop_v2.mp4";
 
 export type WelcomeSlide = { src: string; alt: string };
 

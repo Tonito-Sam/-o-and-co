@@ -1082,6 +1082,7 @@ export const ROLES: RoleDef[] = [
       "/",
       "/billing",
       "/tenants",
+      "/facilities",
       "/analytics",
       "/content",
       "/community",

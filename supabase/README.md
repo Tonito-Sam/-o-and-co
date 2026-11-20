@@ -60,3 +60,20 @@ Keep `VITE_CAFE_PAYSTACK_ENABLED` unset or `false` until the migration, all thre
 Run `npm run check:production` before merging. It performs TypeScript checking, lint, CRM/analytics/café live-data regression checks, and a production build; GitHub Actions runs the same command for pushes and pull requests.
 
 Do not run `supabase db push` before the base schema is installed: the prospect migration references `public.companies` and `public.branches`.
+
+## Facility space galleries
+
+The `202611200001_facility_space_galleries.sql` migration adds branch-scoped facility spaces, private photo storage, and edit permissions for group administrators, the Group CEO, Finance, and assigned branch managers. Apply the migration after the existing WorkspaceOS migrations:
+
+```sh
+supabase db push
+```
+
+The Kyalami source archive is local and is not included in Git. After confirming the migration is applied and the source directory `welcomemedia/Kyalami-and Union-Station/Office & Co Kyalami` is present, run a dry check and then import the original-resolution images:
+
+```sh
+node scripts/import-facility-spaces.mjs --dry-run
+node scripts/import-facility-spaces.mjs
+```
+
+The importer reads `SUPABASE_URL` (or `VITE_SUPABASE_URL`) and `SUPABASE_SERVICE_ROLE_KEY` from the process environment or the local `.env` file. Keep the service-role key private and never commit `.env`. The import is safe to rerun: space rows are upserted by branch/code, existing deterministic photo objects are reused, and obsolete importer-managed photos are removed without affecting manager-added uploads. Office 319 appears in both occupied and vacant source folders; its selected photos follow the active tenant roster, and the conflict is retained in facility metadata for review.
