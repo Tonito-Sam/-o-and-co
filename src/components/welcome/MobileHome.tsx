@@ -21,7 +21,11 @@ import { WhyOfficeAndCo } from "@/components/welcome/WhyOfficeAndCo";
 import { branches } from "@/lib/mock";
 import { tours, type Tour } from "@/lib/tours";
 import { toast } from "sonner";
-import { heroCaptions, welcomeSlides } from "@/components/welcome/hero-media";
+import {
+  heroCaptions,
+  setWelcomeVideoPlaybackSpeed,
+  welcomeSlides,
+} from "@/components/welcome/hero-media";
 import { HeroVideoTreatment } from "@/components/welcome/HeroVideoTreatment";
 import welcomeSoundtrack from "../../../welcomemedia/soundtracks/Aylex - Daydreams (freetouse.com).mp3";
 
@@ -169,7 +173,7 @@ export function MobileHome({
             const active = index === activeSlide;
             const className = `absolute inset-0 h-full w-full object-cover transition-[opacity,transform] duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
               active ? "scale-100 opacity-100" : "scale-[1.06] opacity-0"
-            } saturate-[1.14] contrast-[1.06]`;
+            }`;
             return (
               <video
                 key={slide.src}
@@ -182,6 +186,8 @@ export function MobileHome({
                 playsInline
                 preload={active ? "auto" : "none"}
                 className={className}
+                style={{ filter: "brightness(1.06) contrast(1.2) saturate(1.4)" }}
+                onLoadedMetadata={(event) => setWelcomeVideoPlaybackSpeed(event.currentTarget)}
               />
             );
           })}

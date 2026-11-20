@@ -44,16 +44,16 @@ export function HeroVideoTreatment() {
               className="absolute inset-0 mix-blend-screen"
               style={{
                 background: [
-                  "radial-gradient(ellipse at 16% 26%, rgba(251,146,60,.55), transparent 50%)",
-                  "radial-gradient(ellipse at 76% 18%, rgba(217,70,239,.45), transparent 52%)",
-                  "radial-gradient(ellipse at 78% 84%, rgba(56,189,248,.45), transparent 54%)",
-                  "radial-gradient(ellipse at 24% 76%, rgba(45,212,191,.4), transparent 50%)",
-                  "linear-gradient(115deg, rgba(251,146,60,.15), rgba(217,70,239,.25), rgba(56,189,248,.18))",
+                  "radial-gradient(ellipse at 16% 26%, rgba(251,146,60,.36), transparent 50%)",
+                  "radial-gradient(ellipse at 76% 18%, rgba(217,70,239,.3), transparent 52%)",
+                  "radial-gradient(ellipse at 78% 84%, rgba(56,189,248,.3), transparent 54%)",
+                  "radial-gradient(ellipse at 24% 76%, rgba(45,212,191,.27), transparent 50%)",
+                  "linear-gradient(115deg, rgba(251,146,60,.1), rgba(217,70,239,.16), rgba(56,189,248,.12))",
                 ].join(", "),
               }}
               initial={{ opacity: 0, scale: 1 }}
               animate={{ 
-                opacity: [0, 0.95, 0.85, 0.9, 0.75, 0],
+                opacity: [0, 0.78, 0.7, 0.74, 0.62, 0],
                 scale: [1, 1.04, 1.08, 1.03, 1.06, 1],
                 rotate: [0, 1, -1, 0.5, 0],
               }}
@@ -70,16 +70,16 @@ export function HeroVideoTreatment() {
               className="absolute inset-0 mix-blend-screen"
               style={{
                 background: [
-                  "radial-gradient(ellipse at 22% 86%, rgba(129,140,248,.45), transparent 52%)",
-                  "radial-gradient(ellipse at 86% 44%, rgba(45,212,191,.42), transparent 50%)",
-                  "radial-gradient(ellipse at 12% 18%, rgba(251,191,36,.38), transparent 48%)",
-                  "radial-gradient(ellipse at 92% 92%, rgba(236,72,153,.4), transparent 50%)",
-                  "linear-gradient(30deg, rgba(129,140,248,.12), transparent 46%, rgba(45,212,191,.15))",
+                  "radial-gradient(ellipse at 22% 86%, rgba(129,140,248,.3), transparent 52%)",
+                  "radial-gradient(ellipse at 86% 44%, rgba(45,212,191,.28), transparent 50%)",
+                  "radial-gradient(ellipse at 12% 18%, rgba(251,191,36,.25), transparent 48%)",
+                  "radial-gradient(ellipse at 92% 92%, rgba(236,72,153,.27), transparent 50%)",
+                  "linear-gradient(30deg, rgba(129,140,248,.08), transparent 46%, rgba(45,212,191,.1))",
                 ].join(", "),
               }}
               initial={{ opacity: 0, scale: 1.04 }}
               animate={{ 
-                opacity: [0, 0.85, 0.75, 0.88, 0.7, 0],
+                opacity: [0, 0.68, 0.62, 0.7, 0.58, 0],
                 scale: [1.06, 1, 1.08, 1.02, 1.05, 1],
                 rotate: [0, -0.5, 0.8, -0.3, 0],
               }}

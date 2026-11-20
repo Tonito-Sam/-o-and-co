@@ -24,7 +24,11 @@ import { VirtualTourSelector } from "@/components/VirtualTourSelector";
 import { BranchContactCards } from "@/components/welcome/BranchContactCards";
 import { WhyOfficeAndCo } from "@/components/welcome/WhyOfficeAndCo";
 import bryanstonImg from "@/assets/space-bryanston.jpg";
-import { heroCaptions, welcomeSlides } from "@/components/welcome/hero-media";
+import {
+  heroCaptions,
+  setWelcomeVideoPlaybackSpeed,
+  welcomeSlides,
+} from "@/components/welcome/hero-media";
 import {
   ArrowRight, Check, Sparkles, MapPin, Calendar, Users, Coffee, ShieldCheck,
   Landmark, ChevronRight, ChevronLeft, LogIn, Phone, Mail, CheckCircle2,
@@ -328,7 +332,7 @@ function Hero({
             const active = index === activeSlide;
             const className = `absolute inset-0 h-full w-full object-cover transition-[opacity,transform] duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
               active ? "scale-100 opacity-100" : "scale-[1.06] opacity-0"
-            } saturate-[1.14] contrast-[1.06]`;
+            }`;
 
             return (
               <video
@@ -342,6 +346,8 @@ function Hero({
                 playsInline
                 preload={active ? "auto" : "none"}
                 className={className}
+                style={{ filter: "brightness(1.06) contrast(1.2) saturate(1.4)" }}
+                onLoadedMetadata={(event) => setWelcomeVideoPlaybackSpeed(event.currentTarget)}
               />
             );
           })}
@@ -358,25 +364,27 @@ function Hero({
           </div>
         </div>
 
-        <div className="relative z-10 mx-auto max-w-7xl h-full px-4 sm:px-6 flex flex-col justify-end pb-16 md:pb-24 text-white">
-          <div className="mb-3 text-[10px] font-medium uppercase tracking-[0.2em] text-white/75">
-            Johannesburg · Kyalami &amp; Rosebank
+        <div className="relative z-10 mx-auto max-w-7xl h-full px-4 sm:px-6 flex flex-col justify-end pb-16 md:pb-16 text-white">
+          <div className="md:translate-y-6">
+            <div className="mb-3 text-[10px] font-medium uppercase tracking-[0.2em] text-white/75">
+              Johannesburg · Kyalami &amp; Rosebank
+            </div>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.h1
+                key={heroCaption}
+                initial={{ opacity: 0, y: 22, filter: "blur(10px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -16, filter: "blur(8px)" }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                className="font-display text-3xl sm:text-5xl md:text-5xl lg:text-7xl font-semibold tracking-tight max-w-3xl leading-[1.02] text-balance"
+              >
+                {heroCaption}
+              </motion.h1>
+            </AnimatePresence>
+            <p className="mt-4 sm:mt-5 text-sm sm:text-base md:text-lg text-white/85 max-w-xl leading-relaxed">
+              Private offices, meeting rooms and shared workspace — made for the way you work.
+            </p>
           </div>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.h1
-              key={heroCaption}
-              initial={{ opacity: 0, y: 22, filter: "blur(10px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -16, filter: "blur(8px)" }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="font-display text-3xl sm:text-5xl md:text-5xl lg:text-7xl font-semibold tracking-tight max-w-3xl leading-[1.02] text-balance"
-            >
-              {heroCaption}
-            </motion.h1>
-          </AnimatePresence>
-          <p className="mt-4 sm:mt-5 text-sm sm:text-base md:text-lg text-white/85 max-w-xl leading-relaxed">
-            Private offices, meeting rooms and shared workspace — made for the way you work.
-          </p>
           <div className="mt-5 sm:mt-7 flex flex-wrap items-center justify-end gap-3">
             <Button size="lg" className="gap-1.5" onClick={onOpenBooking}>
               Book a tour <ArrowRight className="size-4" />
