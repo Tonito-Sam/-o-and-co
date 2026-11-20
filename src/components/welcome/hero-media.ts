@@ -3,8 +3,8 @@ import welcomeKyalamiVideo from "../../../welcomemedia/office_co_kyalami_timelap
 export type WelcomeSlide = { src: string; alt: string };
 
 export function setWelcomeVideoPlaybackSpeed(video: HTMLVideoElement) {
-  video.defaultPlaybackRate = 1.3;
-  video.playbackRate = 1.3;
+  video.defaultPlaybackRate = 1;
+  video.playbackRate = 1;
 }
 
 export const welcomeSlides: WelcomeSlide[] = [
