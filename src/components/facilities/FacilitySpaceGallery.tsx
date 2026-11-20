@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  CircleCheck,
+  Info,
   ImagePlus,
   Images,
   Pencil,
@@ -13,6 +15,16 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -23,6 +35,17 @@ type TenantRow = {
   branch_id: string;
   office_number: string | null;
   status: string;
+  tier: string | null;
+  desks: number | null;
+  mrr_zar: number | null;
+  since: string | null;
+  lease_term: string | null;
+  rental_end_date: string | null;
+  office_size: number | null;
+  office_details: string | null;
+  primary_contact_name: string | null;
+  primary_contact_email: string | null;
+  next_escalation_date: string | null;
   organizations: { name?: string } | { name?: string }[] | null;
   companies: { name?: string } | { name?: string }[] | null;
 };
@@ -33,6 +56,12 @@ type Photo = {
   caption: string | null;
   sort_order: number;
   signedUrl: string | null;
+};
+type TourPhoto = {
+  id: string;
+  source_photo_id: string;
+  object_path: string;
+  sort_order: number;
 };
 type FacilitySpace = {
   id: string;
@@ -45,11 +74,48 @@ type FacilitySpace = {
   tenant_id: string | null;
   metadata: Record<string, unknown> | null;
   facility_space_photos: Photo[];
+  facility_space_tour_photos: TourPhoto[];
 };
 
 const BUCKET = "facility-space-photos";
+const TOUR_BUCKET = "facility-vacant-tour-photos";
 const MAX_IMAGE_SIZE = 50 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const LEASE_EXPIRY_WARNING_DAYS = 30;
+
+function leaseDateState(date: string | null) {
+  if (!date) return null;
+  const now = new Date();
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  const daysUntilExpiry = Math.ceil(
+    (new Date(`${date}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) /
+      (24 * 60 * 60 * 1000),
+  );
+  return {
+    expired: date < today,
+    expiringSoon: date >= today && daysUntilExpiry <= LEASE_EXPIRY_WARNING_DAYS,
+    daysUntilExpiry,
+    displayDate: new Date(`${date}T00:00:00`).toLocaleDateString("en-ZA"),
+  };
+}
+
+function formatTenantDate(date: string | null) {
+  return date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-ZA") : "Not recorded";
+}
+
+function formatZar(amount: number | null) {
+  return amount === null
+    ? "Not recorded"
+    : new Intl.NumberFormat("en-ZA", {
+        style: "currency",
+        currency: "ZAR",
+        minimumFractionDigits: 2,
+      }).format(amount);
+}
 
 function relatedName(value: TenantRow["organizations"] | TenantRow["companies"]) {
   const record = Array.isArray(value) ? value[0] : value;
@@ -85,7 +151,10 @@ export function FacilitySpaceGallery({
   const [draftName, setDraftName] = useState("");
   const [draftStatus, setDraftStatus] = useState<FacilitySpace["status"]>("shared");
   const [draftTenantId, setDraftTenantId] = useState("");
+  const [draftRentalEndDate, setDraftRentalEndDate] = useState("");
   const [activePhoto, setActivePhoto] = useState<{ spaceId: string; index: number } | null>(null);
+  const [tenantInfoSpace, setTenantInfoSpace] = useState<FacilitySpace | null>(null);
+  const [vacancyConfirmationOpen, setVacancyConfirmationOpen] = useState(false);
 
   const scopedBranches = useMemo(
     () => branches.filter((branch) => branchFilter === "all" || branch.id === branchFilter),
@@ -131,13 +200,15 @@ export function FacilitySpaceGallery({
       supabase
         .from("facility_spaces")
         .select(
-          "id,branch_id,code,name,category,status,office_number,tenant_id,metadata,facility_space_photos(id,object_path,source_filename,caption,sort_order)",
+          "id,branch_id,code,name,category,status,office_number,tenant_id,metadata,facility_space_photos(id,object_path,source_filename,caption,sort_order),facility_space_tour_photos(id,source_photo_id,object_path,sort_order)",
         )
         .in("branch_id", branchIds)
         .order("name"),
       supabase
         .from("tenants")
-        .select("id,branch_id,office_number,status,organizations(name),companies(name)")
+        .select(
+          "id,branch_id,office_number,status,tier,desks,mrr_zar,since,lease_term,rental_end_date,office_size,office_details,primary_contact_name,primary_contact_email,next_escalation_date,organizations(name),companies(name)",
+        )
         .in("branch_id", branchIds)
         .eq("status", "active"),
     ]);
@@ -197,6 +268,86 @@ export function FacilitySpaceGallery({
     void loadSpaces();
   }, [loadSpaces]);
 
+  const unpublishTourPhoto = async (space: FacilitySpace, tourPhoto: TourPhoto) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Workspace data is not configured.");
+      return false;
+    }
+
+    const { error: storageError } = await supabase.storage
+      .from(TOUR_BUCKET)
+      .remove([tourPhoto.object_path]);
+    if (storageError) {
+      toast.error(`Could not remove the public tour photo: ${storageError.message}`);
+      return false;
+    }
+
+    const { error: recordError } = await supabase
+      .from("facility_space_tour_photos")
+      .delete()
+      .eq("id", tourPhoto.id)
+      .eq("space_id", space.id);
+    if (recordError) {
+      toast.error(
+        `Tour photo file was removed, but its listing could not be deleted: ${recordError.message}`,
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const publishTourPhoto = async (space: FacilitySpace, photo: Photo) => {
+    const branch = branches.find((item) => item.id === space.branch_id);
+    const supabase = getSupabaseClient();
+    if (!branch || !supabase) {
+      toast.error(
+        !branch ? "The space's branch could not be resolved." : "Workspace data is not configured.",
+      );
+      return false;
+    }
+
+    const { data: image, error: downloadError } = await supabase.storage
+      .from(BUCKET)
+      .download(photo.object_path);
+    if (downloadError) {
+      toast.error(`Could not open the private facility photo: ${downloadError.message}`);
+      return false;
+    }
+
+    const objectPath = `${branch.slug}/${space.id}/${photo.id}-${safeFilename(photo.source_filename)}`;
+    const { error: uploadError } = await supabase.storage
+      .from(TOUR_BUCKET)
+      .upload(objectPath, image, {
+        contentType: image.type || "image/jpeg",
+        upsert: false,
+      });
+    if (uploadError) {
+      toast.error(`Could not publish the tour photo: ${uploadError.message}`);
+      return false;
+    }
+
+    const { error: recordError } = await supabase.from("facility_space_tour_photos").insert({
+      branch_id: space.branch_id,
+      branch_slug: branch.slug,
+      space_id: space.id,
+      space_name: space.name,
+      office_number: space.office_number,
+      source_photo_id: photo.id,
+      object_path: objectPath,
+      sort_order: photo.sort_order,
+    });
+    if (recordError) {
+      const { error: cleanupError } = await supabase.storage.from(TOUR_BUCKET).remove([objectPath]);
+      if (cleanupError) {
+        console.error("Could not clean up an unlisted public tour photo:", cleanupError.message);
+      }
+      toast.error(`Photo uploaded but could not be added to the tour: ${recordError.message}`);
+      return false;
+    }
+    return true;
+  };
+
   const visibleSpaces = useMemo(() => {
     const query = search.trim().toLowerCase();
     return spaces.filter((space) => {
@@ -220,9 +371,10 @@ export function FacilitySpaceGallery({
     setDraftName(space.name);
     setDraftStatus(space.status);
     setDraftTenantId(space.tenant_id ?? "");
+    setDraftRentalEndDate(tenantById.get(space.tenant_id ?? "")?.rental_end_date ?? "");
   };
 
-  const saveSpace = async () => {
+  const saveSpace = async (confirmedVacancy = false) => {
     if (!editingSpace) return;
     const name = draftName.trim();
     if (!name) {
@@ -234,22 +386,58 @@ export function FacilitySpaceGallery({
       toast.error("Workspace data is not configured.");
       return;
     }
+    const markingVacant = editingSpace.status === "occupied" && draftStatus === "vacant";
+    if (markingVacant && !confirmedVacancy) {
+      setVacancyConfirmationOpen(true);
+      return;
+    }
 
     setBusySpaceId(editingSpace.id);
-    const { error: updateError } = await supabase
-      .from("facility_spaces")
-      .update({
-        name,
-        status: draftStatus,
-        tenant_id: draftStatus === "occupied" ? draftTenantId || null : null,
-      })
-      .eq("id", editingSpace.id);
+    if (editingSpace.status === "vacant" && draftStatus !== "vacant") {
+      for (const tourPhoto of editingSpace.facility_space_tour_photos) {
+        const unpublished = await unpublishTourPhoto(editingSpace, tourPhoto);
+        if (!unpublished) {
+          setBusySpaceId(null);
+          await loadSpaces();
+          return;
+        }
+      }
+    }
+
+    if (draftStatus === "occupied" && draftTenantId) {
+      const { error: leaseDateError } = await supabase
+        .from("tenants")
+        .update({ rental_end_date: draftRentalEndDate || null })
+        .eq("id", draftTenantId)
+        .eq("branch_id", editingSpace.branch_id);
+      if (leaseDateError) {
+        setBusySpaceId(null);
+        toast.error(`Could not update the tenant's lease expiry date: ${leaseDateError.message}`);
+        return;
+      }
+    }
+
+    const updateResult = markingVacant
+      ? await supabase.rpc("mark_facility_space_vacant", {
+          p_space_id: editingSpace.id,
+          p_name: name,
+        })
+      : await supabase
+          .from("facility_spaces")
+          .update({
+            name,
+            status: draftStatus,
+            tenant_id: draftStatus === "occupied" ? draftTenantId || null : null,
+          })
+          .eq("id", editingSpace.id);
+    const updateError = updateResult.error;
     setBusySpaceId(null);
     if (updateError) {
       toast.error(`Could not update space: ${updateError.message}`);
       return;
     }
     toast.success("Facility space updated.");
+    setVacancyConfirmationOpen(false);
     setEditingSpace(null);
     await loadSpaces();
   };
@@ -327,6 +515,16 @@ export function FacilitySpaceGallery({
       toast.error("Workspace data is not configured.");
       return;
     }
+    const space = spaces.find((item) =>
+      item.facility_space_photos.some((facilityPhoto) => facilityPhoto.id === photo.id),
+    );
+    const publishedPhoto = space?.facility_space_tour_photos.find(
+      (tourPhoto) => tourPhoto.source_photo_id === photo.id,
+    );
+    if (space && publishedPhoto) {
+      const unpublished = await unpublishTourPhoto(space, publishedPhoto);
+      if (!unpublished) return;
+    }
     const { error: removeError } = await supabase.storage.from(BUCKET).remove([photo.object_path]);
     if (removeError) {
       toast.error(`Could not remove photo file: ${removeError.message}`);
@@ -348,10 +546,44 @@ export function FacilitySpaceGallery({
     await loadSpaces();
   };
 
+  const toggleTourPhoto = async (space: FacilitySpace, photo: Photo) => {
+    if (space.status !== "vacant" || space.category !== "office") {
+      toast.error("Only photos of vacant offices can be added to the public tour.");
+      return;
+    }
+    setBusySpaceId(space.id);
+    const publishedPhoto = space.facility_space_tour_photos.find(
+      (tourPhoto) => tourPhoto.source_photo_id === photo.id,
+    );
+    const success = publishedPhoto
+      ? await unpublishTourPhoto(space, publishedPhoto)
+      : await publishTourPhoto(space, photo);
+    setBusySpaceId(null);
+    if (!success) return;
+    toast.success(
+      publishedPhoto
+        ? "Photo removed from the vacant-office tour."
+        : "Photo added to the vacant-office tour.",
+    );
+    await loadSpaces();
+  };
+
+  const beginVacancyUpdate = (space: FacilitySpace) => {
+    setEditingSpace(space);
+    setDraftName(space.name);
+    setDraftStatus("vacant");
+    setDraftTenantId("");
+    setDraftRentalEndDate("");
+    setVacancyConfirmationOpen(true);
+  };
+
   const activeSpace = activePhoto
     ? (visibleSpaces.find((space) => space.id === activePhoto.spaceId) ?? null)
     : null;
   const activePhotoRecord = activeSpace?.facility_space_photos[activePhoto?.index ?? -1] ?? null;
+  const tenantInfo = tenantInfoSpace
+    ? tenantById.get(tenantInfoSpace.tenant_id ?? "") ?? null
+    : null;
 
   return (
     <section className="space-y-4 rounded-lg border bg-card p-4 sm:p-5">
@@ -359,8 +591,8 @@ export function FacilitySpaceGallery({
         <div>
           <h2 className="font-display text-base font-semibold">Spaces &amp; photo galleries</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Space images, tenant occupancy, and vacant offices. Photos are private to authorized
-            facility managers.
+            Lease dates are informational. Confirm renewals before manually marking a space vacant;
+            only photos explicitly added to the tour are public.
           </p>
         </div>
         <Button
@@ -460,9 +692,34 @@ export function FacilitySpaceGallery({
                     </Badge>
                   </div>
                   {space.status === "occupied" ? (
-                    <p className="truncate text-sm text-muted-foreground">
-                      Tenant: {tenantLabel(space.tenant_id) || "Not linked"}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="truncate text-sm text-muted-foreground">
+                        Tenant: {tenantLabel(space.tenant_id) || "Not linked"}
+                      </p>
+                      {(() => {
+                        const tenant = tenantById.get(space.tenant_id ?? "");
+                        const lease = leaseDateState(tenant?.rental_end_date ?? null);
+                        return lease ? (
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="text-muted-foreground">
+                              Lease expiry: {lease.displayDate}
+                            </span>
+                            {lease.expired ? (
+                              <Badge variant="destructive">Expired · check renewal</Badge>
+                            ) : lease.expiringSoon ? (
+                              <Badge variant="secondary">
+                                Expires in {lease.daysUntilExpiry} day
+                                {lease.daysUntilExpiry === 1 ? "" : "s"}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Lease expiry: Not recorded
+                          </p>
+                        );
+                      })()}
+                    </div>
                   ) : null}
                   {hasSourceConflict ? (
                     <p className="flex gap-2 rounded-md bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-200">
@@ -472,6 +729,12 @@ export function FacilitySpaceGallery({
                     </p>
                   ) : null}
                   <div className="flex flex-wrap gap-2">
+                    {space.category === "office" && space.status === "vacant" ? (
+                      <Badge variant="outline">
+                        {space.facility_space_tour_photos.length} tour photo
+                        {space.facility_space_tour_photos.length === 1 ? "" : "s"}
+                      </Badge>
+                    ) : null}
                     <Button
                       variant="outline"
                       size="sm"
@@ -491,6 +754,28 @@ export function FacilitySpaceGallery({
                       <ImagePlus className="mr-1.5 size-3.5" />
                       {busySpaceId === space.id ? "Uploading…" : "Add photos"}
                     </Button>
+                    {space.status === "occupied" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTenantInfoSpace(space)}
+                        aria-label={`Tenant info for ${space.name}`}
+                      >
+                        <Info className="mr-1.5 size-3.5" /> Info
+                      </Button>
+                    ) : null}
+                    {space.status === "occupied" &&
+                    leaseDateState(tenantById.get(space.tenant_id ?? "")?.rental_end_date ?? null)
+                      ?.expired ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => beginVacancyUpdate(space)}
+                        disabled={busySpaceId === space.id}
+                      >
+                        Mark vacant
+                      </Button>
+                    ) : null}
                     <input
                       id={`facility-upload-${space.id}`}
                       type="file"
@@ -559,7 +844,11 @@ export function FacilitySpaceGallery({
                   <select
                     id="facility-space-tenant"
                     value={draftTenantId}
-                    onChange={(event) => setDraftTenantId(event.target.value)}
+                    onChange={(event) => {
+                      const tenantId = event.target.value;
+                      setDraftTenantId(tenantId);
+                      setDraftRentalEndDate(tenantById.get(tenantId)?.rental_end_date ?? "");
+                    }}
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                   >
                     <option value="">Select a tenant</option>
@@ -576,6 +865,19 @@ export function FacilitySpaceGallery({
                   </select>
                 </div>
               ) : null}
+              {draftStatus === "occupied" && draftTenantId ? (
+                <div className="space-y-1.5">
+                  <label htmlFor="facility-space-lease-expiry" className="text-sm font-medium">
+                    Lease expiry date
+                  </label>
+                  <Input
+                    id="facility-space-lease-expiry"
+                    type="date"
+                    value={draftRentalEndDate}
+                    onChange={(event) => setDraftRentalEndDate(event.target.value)}
+                  />
+                </div>
+              ) : null}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setEditingSpace(null)}>
                   Cancel
@@ -585,6 +887,104 @@ export function FacilitySpaceGallery({
                 </Button>
               </div>
             </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={vacancyConfirmationOpen}
+        onOpenChange={(open) => {
+          setVacancyConfirmationOpen(open);
+          if (!open && editingSpace?.status === "occupied") setDraftStatus("occupied");
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm this office is vacant?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This does not happen automatically when a lease expires. Confirm the tenant has not
+              renewed before continuing. The space will be marked vacant and its active tenant
+              record will be marked ended.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busySpaceId !== null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!editingSpace || busySpaceId === editingSpace.id}
+              onClick={(event) => {
+                event.preventDefault();
+                void saveSpace(true);
+              }}
+            >
+              Confirm vacancy
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={tenantInfoSpace !== null}
+        onOpenChange={(open) => {
+          if (!open) setTenantInfoSpace(null);
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Current tenant info</DialogTitle>
+          </DialogHeader>
+          {tenantInfoSpace ? (
+            tenantInfo ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="font-display text-lg font-semibold">
+                    {relatedName(tenantInfo.organizations) ||
+                      relatedName(tenantInfo.companies) ||
+                      "Tenant"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {branchNames.get(tenantInfo.branch_id) ?? "Branch"} · Office{" "}
+                    {tenantInfo.office_number ?? tenantInfoSpace.office_number ?? "not assigned"}
+                  </p>
+                </div>
+                <dl className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    ["Lease status", tenantInfo.status],
+                    ["Monthly rent", formatZar(tenantInfo.mrr_zar)],
+                    ["Lease starts", formatTenantDate(tenantInfo.since)],
+                    ["Lease term", tenantInfo.lease_term || "Not recorded"],
+                    ["Lease expiry", formatTenantDate(tenantInfo.rental_end_date)],
+                    ["Next rent escalation", formatTenantDate(tenantInfo.next_escalation_date)],
+                    ["Primary contact", tenantInfo.primary_contact_name || "Not recorded"],
+                    ["Contact email", tenantInfo.primary_contact_email || "Not recorded"],
+                    [
+                      "Office size",
+                      tenantInfo.office_size === null
+                        ? "Not recorded"
+                        : String(tenantInfo.office_size),
+                    ],
+                    [
+                      "Desks",
+                      tenantInfo.desks === null ? "Not recorded" : String(tenantInfo.desks),
+                    ],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-md border bg-muted/20 p-3">
+                      <dt className="text-xs text-muted-foreground">{label}</dt>
+                      <dd className="mt-1 break-words text-sm font-medium">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {tenantInfo.office_details ? (
+                  <div className="rounded-md border bg-muted/20 p-3">
+                    <p className="text-xs text-muted-foreground">Office details</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm">{tenantInfo.office_details}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No active tenant record is linked to this office.
+              </p>
+            )
           ) : null}
         </DialogContent>
       </Dialog>
@@ -620,6 +1020,23 @@ export function FacilitySpaceGallery({
                   {activeSpace?.facility_space_photos.length ?? 0}
                 </p>
                 <div className="flex gap-2">
+                  {activeSpace?.category === "office" && activeSpace.status === "vacant" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busySpaceId === activeSpace.id}
+                      onClick={() =>
+                        activePhotoRecord && void toggleTourPhoto(activeSpace, activePhotoRecord)
+                      }
+                    >
+                      <CircleCheck className="mr-1.5 size-4" />
+                      {activeSpace.facility_space_tour_photos.some(
+                        (photo) => photo.source_photo_id === activePhotoRecord.id,
+                      )
+                        ? "Remove from tour"
+                        : "Add to tour"}
+                    </Button>
+                  ) : null}
                   <Button
                     variant="outline"
                     size="sm"

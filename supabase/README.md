@@ -77,3 +77,5 @@ node scripts/import-facility-spaces.mjs
 ```
 
 The importer reads `SUPABASE_URL` (or `VITE_SUPABASE_URL`) and `SUPABASE_SERVICE_ROLE_KEY` from the process environment or the local `.env` file. Keep the service-role key private and never commit `.env`. The import is safe to rerun: space rows are upserted by branch/code, existing deterministic photo objects are reused, and obsolete importer-managed photos are removed without affecting manager-added uploads. Office 319 appears in both occupied and vacant source folders; its selected photos follow the active tenant roster, and the conflict is retained in facility metadata for review.
+
+The `202611200003_facility_lease_expiry_and_vacant_tours.sql` migration adds lease-expiry tracking in the facility editor and manager-published vacant-office photos for the public Kyalami virtual tour. Lease expiry is only an alert: a manager must confirm non-renewal before marking an occupied space vacant. Only photos explicitly added to the tour are copied to the public tour bucket; occupied or otherwise non-vacant spaces are excluded.

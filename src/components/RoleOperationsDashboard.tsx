@@ -29,11 +29,15 @@ type DashboardEvent = {
   starts_at: string;
   kind: string | null;
 };
+type BranchLeaseRow = { rental_end_date: string | null };
 type Snapshot = {
   availableOffices: number;
   totalOffices: number;
   availableDesks: number;
   totalDesks: number;
+  expiredLeases: number;
+  expiringLeases: number;
+  tenantsMissingLeaseDate: number;
   upcomingBookings: number;
   openTickets: number;
   upcomingEvents: DashboardEvent[];
@@ -47,6 +51,9 @@ const emptySnapshot: Snapshot = {
   totalOffices: 0,
   availableDesks: 0,
   totalDesks: 0,
+  expiredLeases: 0,
+  expiringLeases: 0,
+  tenantsMissingLeaseDate: 0,
   upcomingBookings: 0,
   openTickets: 0,
   upcomingEvents: [],
@@ -54,6 +61,14 @@ const emptySnapshot: Snapshot = {
   activeCafeProducts: 0,
   lowStockCafeProducts: 0,
 };
+
+function dateKey(date: Date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+}
 
 const dateLabel = (date: string) =>
   new Intl.DateTimeFormat("en-ZA", {
@@ -124,6 +139,27 @@ export function RoleOperationsDashboard({
           .limit(5),
       ]);
 
+      let facilityOfficeRows: { status: string }[] = [];
+      let tenantLeaseRows: BranchLeaseRow[] = [];
+      let managerDataError: string | null = null;
+      if (role.id === "branch-manager") {
+        const [facilitySpaces, tenants] = await Promise.all([
+          supabase
+            .from("facility_spaces")
+            .select("status")
+            .eq("branch_id", branch.id)
+            .eq("category", "office"),
+          supabase
+            .from("tenants")
+            .select("rental_end_date")
+            .eq("branch_id", branch.id)
+            .eq("status", "active"),
+        ]);
+        managerDataError = facilitySpaces.error?.message ?? tenants.error?.message ?? null;
+        facilityOfficeRows = facilitySpaces.data ?? [];
+        tenantLeaseRows = (tenants.data ?? []) as BranchLeaseRow[];
+      }
+
       let upcomingBookings = 0;
       let openTickets = 0;
       let pendingPosts = 0;
@@ -175,22 +211,46 @@ export function RoleOperationsDashboard({
 
       if (!active) return;
       const queryError = [
-        officeResult.error,
-        deskResult.error,
-        eventResult.error,
-        bookingResult?.error,
-        ticketResult?.error,
-        postResult?.error,
-        cafeProductsError,
-      ].find(Boolean);
-      if (queryError) setError(queryError.message);
+        managerDataError,
+        ...(role.id === "branch-manager"
+          ? []
+          : [officeResult.error?.message, deskResult.error?.message]),
+        eventResult.error?.message,
+        bookingResult?.error?.message,
+        ticketResult?.error?.message,
+        postResult?.error?.message,
+        cafeProductsError?.message,
+      ].find((message): message is string => Boolean(message));
+      if (queryError) setError(queryError);
       const offices = officeResult.data ?? [];
       const desks = deskResult.data ?? [];
+      const todayKey = dateKey(new Date());
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() + 30);
+      const cutoffKey = dateKey(cutoffDate);
+      const availableOffices =
+        role.id === "branch-manager"
+          ? facilityOfficeRows.filter(({ status }) => status === "vacant").length
+          : offices.filter(({ status }) => status === "available").length;
+      const totalOffices =
+        role.id === "branch-manager" ? facilityOfficeRows.length : offices.length;
       setSnapshot({
-        availableOffices: offices.filter(({ status }) => status === "available").length,
-        totalOffices: offices.length,
-        availableDesks: desks.filter(({ status }) => status === "available").length,
-        totalDesks: desks.length,
+        availableOffices,
+        totalOffices,
+        availableDesks:
+          role.id === "branch-manager"
+            ? 0
+            : desks.filter(({ status }) => status === "available").length,
+        totalDesks: role.id === "branch-manager" ? 0 : desks.length,
+        expiredLeases: tenantLeaseRows.filter(
+          ({ rental_end_date }) => rental_end_date && rental_end_date < todayKey,
+        ).length,
+        expiringLeases: tenantLeaseRows.filter(
+          ({ rental_end_date }) =>
+            rental_end_date && rental_end_date >= todayKey && rental_end_date <= cutoffKey,
+        ).length,
+        tenantsMissingLeaseDate: tenantLeaseRows.filter(({ rental_end_date }) => !rental_end_date)
+          .length,
         upcomingBookings,
         openTickets,
         upcomingEvents: (eventResult.data ?? []) as DashboardEvent[],
@@ -226,7 +286,7 @@ export function RoleOperationsDashboard({
     },
     "branch-manager": {
       title: `${branchName ?? "Branch"} operations`,
-      description: "A branch-level view of space availability, upcoming requests, and service issues.",
+        description: "A branch-level view of vacant offices, lease dates, upcoming requests, and service issues.",
       links: [
         { label: "Facilities", to: "/facilities", icon: DoorOpen },
         { label: "Bookings", to: "/bookings", icon: CalendarDays },
@@ -282,9 +342,21 @@ export function RoleOperationsDashboard({
   const focusHighlights =
     role.id === "branch-manager"
       ? [
-          { label: "Space availability", value: `${availableSpaces} / ${totalSpaces}`, tone: "success" },
-          { label: "Open issues", value: String(snapshot.openTickets), tone: snapshot.openTickets ? "warning" : "success" },
-          { label: "Booking activity", value: String(snapshot.upcomingBookings), tone: "brand" },
+          {
+            label: "Vacant offices",
+            value: `${snapshot.availableOffices} / ${snapshot.totalOffices}`,
+            tone: "success",
+          },
+          {
+            label: "Expired leases",
+            value: String(snapshot.expiredLeases),
+            tone: snapshot.expiredLeases ? "warning" : "success",
+          },
+          {
+            label: "Lease dates missing",
+            value: String(snapshot.tenantsMissingLeaseDate),
+            tone: snapshot.tenantsMissingLeaseDate ? "warning" : "success",
+          },
         ]
       : role.id === "cafe-manager"
         ? [
@@ -376,11 +448,43 @@ export function RoleOperationsDashboard({
           </section>
 
           {isBranchManager ? (
-            <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-4">
-              <StatCard label="Available spaces" value={`${availableSpaces} / ${totalSpaces}`} hint="Offices and desks" accent="success" />
-              <StatCard label="Upcoming requests" value={String(snapshot.upcomingBookings)} hint="Requested or confirmed" accent="brand" />
-              <StatCard label="Open service issues" value={String(snapshot.openTickets)} hint="Needs branch attention" accent={snapshot.openTickets ? "warning" : undefined} />
-              <StatCard label="Upcoming events" value={String(snapshot.upcomingEvents.length)} hint="Published at this branch" />
+            <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
+              <StatCard
+                label="Vacant offices"
+                value={`${snapshot.availableOffices} / ${snapshot.totalOffices}`}
+                hint="Facility gallery inventory"
+                accent="success"
+              />
+              <StatCard
+                label="Expired leases"
+                value={String(snapshot.expiredLeases)}
+                hint="Confirm renewals before changing occupancy"
+                accent={snapshot.expiredLeases ? "warning" : undefined}
+              />
+              <StatCard
+                label="Due in 30 days"
+                value={String(snapshot.expiringLeases)}
+                hint="Lease end dates coming up"
+                accent={snapshot.expiringLeases ? "warning" : undefined}
+              />
+              <StatCard
+                label="Missing lease dates"
+                value={String(snapshot.tenantsMissingLeaseDate)}
+                hint="Active tenant records"
+                accent={snapshot.tenantsMissingLeaseDate ? "warning" : "success"}
+              />
+              <StatCard
+                label="Upcoming requests"
+                value={String(snapshot.upcomingBookings)}
+                hint="Requested or confirmed"
+                accent="brand"
+              />
+              <StatCard
+                label="Open service issues"
+                value={String(snapshot.openTickets)}
+                hint="Needs branch attention"
+                accent={snapshot.openTickets ? "warning" : undefined}
+              />
             </div>
           ) : isCafeManager ? (
             <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-3">

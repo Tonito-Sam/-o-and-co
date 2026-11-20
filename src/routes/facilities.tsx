@@ -28,6 +28,17 @@ type FacilityRecord = {
   available_quantity: number | null;
   monthly_zar: number | null;
 };
+type FacilitySpaceSummary = {
+  branch_id: string;
+  code: string;
+  name: string;
+  category: "office" | "meeting_room" | "communal" | "amenity";
+  status: "occupied" | "vacant" | "shared" | "maintenance" | "needs_review";
+};
+type TenantLeaseSummary = {
+  branch_id: string;
+  rental_end_date: string | null;
+};
 
 function Facilities() {
   const { role, isLoading } = useRole();
@@ -56,6 +67,8 @@ function Facilities() {
   );
   const [branches, setBranches] = useState<Branch[]>([]);
   const [facilities, setFacilities] = useState<FacilityRecord[]>([]);
+  const [facilitySpaces, setFacilitySpaces] = useState<FacilitySpaceSummary[]>([]);
+  const [activeTenantLeases, setActiveTenantLeases] = useState<TenantLeaseSummary[]>([]);
   const [branchFilter, setBranchFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -81,6 +94,8 @@ function Facilities() {
       setError(branchResult.error.message);
       setBranches([]);
       setFacilities([]);
+      setFacilitySpaces([]);
+      setActiveTenantLeases([]);
       setLoading(false);
       return;
     }
@@ -96,6 +111,8 @@ function Facilities() {
     const scopedBranchIds = allowedBranches.map((branch) => branch.id);
     if (isBranchManager && scopedBranchIds.length === 0) {
       setFacilities([]);
+      setFacilitySpaces([]);
+      setActiveTenantLeases([]);
       setError("");
       setLoading(false);
       return;
@@ -107,6 +124,15 @@ function Facilities() {
     let deskQuery = supabase.from("branch_desks").select("id,branch_id,code,name,floor,status,desk_type,monthly_zar").neq("status", "inactive");
     let parkingQuery = supabase.from("branch_parking_spaces").select("id,branch_id,code,name,parking_type,status,monthly_zar").neq("status", "inactive");
     let equipmentQuery = supabase.from("branch_equipment").select("id,branch_id,name,category,quantity,available_quantity,is_active").eq("is_active", true);
+    const facilitySpaceQuery = supabase
+      .from("facility_spaces")
+      .select("branch_id,code,name,category,status")
+      .in("branch_id", scopedBranchIds);
+    const tenantLeaseQuery = supabase
+      .from("tenants")
+      .select("branch_id,rental_end_date")
+      .eq("status", "active")
+      .in("branch_id", scopedBranchIds);
     if (isBranchManager) {
       facilityQuery = facilityQuery.in("branch_id", scopedBranchIds);
       roomQuery = roomQuery.in("branch_id", scopedBranchIds);
@@ -116,18 +142,39 @@ function Facilities() {
       equipmentQuery = equipmentQuery.in("branch_id", scopedBranchIds);
     }
 
-    const [facilityResult, roomResult, officeResult, deskResult, parkingResult, equipmentResult] = await Promise.all([
+    const [
+      facilityResult,
+      roomResult,
+      officeResult,
+      deskResult,
+      parkingResult,
+      equipmentResult,
+      facilitySpaceResult,
+      tenantLeaseResult,
+    ] = await Promise.all([
       facilityQuery,
       roomQuery,
       officeQuery,
       deskQuery,
       parkingQuery,
       equipmentQuery,
+      facilitySpaceQuery,
+      tenantLeaseQuery,
     ]);
-    const failure = facilityResult.error ?? roomResult.error ?? officeResult.error ?? deskResult.error ?? parkingResult.error ?? equipmentResult.error;
+    const failure =
+      facilityResult.error ??
+      roomResult.error ??
+      officeResult.error ??
+      deskResult.error ??
+      parkingResult.error ??
+      equipmentResult.error ??
+      facilitySpaceResult.error ??
+      tenantLeaseResult.error;
     if (failure) {
       setError(failure.message);
       setFacilities([]);
+      setFacilitySpaces([]);
+      setActiveTenantLeases([]);
       setLoading(false);
       return;
     }
@@ -198,6 +245,8 @@ function Facilities() {
       })),
     ];
     setFacilities(portfolioInventory.filter((item) => item.branch_name) as FacilityRecord[]);
+    setFacilitySpaces((facilitySpaceResult.data ?? []) as FacilitySpaceSummary[]);
+    setActiveTenantLeases((tenantLeaseResult.data ?? []) as TenantLeaseSummary[]);
     setError("");
     setLoading(false);
   }, [assignedBranchIds, assignedBranchNames, canViewFacilities, isBranchManager, isLoading]);
@@ -220,22 +269,46 @@ function Facilities() {
       ),
     [branchFilter, facilities, search],
   );
-  const availableCount = visibleFacilities.filter(
-    (facility) => ["Office", "hot desk", "dedicated", "team desk"].includes(facility.type) && facility.status === "available",
-  ).length;
-  const occupiedCount = visibleFacilities.filter(
-    (facility) => ["Office", "hot desk", "dedicated", "team desk"].includes(facility.type) && facility.status === "occupied",
-  ).length;
-  const maintenanceCount = visibleFacilities.filter(
-    (facility) => ["Office", "hot desk", "dedicated", "team desk"].includes(facility.type) && facility.status === "maintenance",
-  ).length;
-  const facilityCount = visibleFacilities.filter((facility) => facility.type === "Facility").length;
-  const officeAndDeskCount = visibleFacilities.filter((facility) => ["Office", "hot desk", "dedicated", "team desk"].includes(facility.type)).length;
-  const otherResourceCount = visibleFacilities.filter((facility) => facility.type.startsWith("Room ·") || facility.type.startsWith("Parking ·")).length;
-  const equipmentUnits = visibleFacilities.filter((facility) => facility.type.startsWith("Equipment ·"));
-  const availableEquipment = equipmentUnits.reduce((sum, item) => sum + (item.available_quantity ?? 0), 0);
-  const totalEquipment = equipmentUnits.reduce((sum, item) => sum + (item.quantity ?? 0), 0);
   const branchNameById = new Map(branches.map((branch) => [branch.id, branch.name]));
+  const searchTerm = search.trim().toLowerCase();
+  const visibleFacilitySpaces = facilitySpaces.filter(
+    (space) =>
+      (branchFilter === "all" || space.branch_id === branchFilter) &&
+      (!searchTerm ||
+        `${space.name} ${space.code} ${space.category} ${branchNameById.get(space.branch_id) ?? ""}`
+          .toLowerCase()
+          .includes(searchTerm)),
+  );
+  const visibleOfficeSpaces = visibleFacilitySpaces.filter((space) => space.category === "office");
+  const visibleLeaseRows = activeTenantLeases.filter(
+    (tenant) => branchFilter === "all" || tenant.branch_id === branchFilter,
+  );
+  const today = new Date();
+  const todayKey = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
+  const nextMonth = new Date(today);
+  nextMonth.setDate(nextMonth.getDate() + 30);
+  const nextMonthKey = [
+    nextMonth.getFullYear(),
+    String(nextMonth.getMonth() + 1).padStart(2, "0"),
+    String(nextMonth.getDate()).padStart(2, "0"),
+  ].join("-");
+  const expiredLeaseCount = visibleLeaseRows.filter(
+    (tenant) => tenant.rental_end_date && tenant.rental_end_date < todayKey,
+  ).length;
+  const soonLeaseCount = visibleLeaseRows.filter(
+    (tenant) =>
+      tenant.rental_end_date &&
+      tenant.rental_end_date >= todayKey &&
+      tenant.rental_end_date <= nextMonthKey,
+  ).length;
+  const missingLeaseDateCount = visibleLeaseRows.filter((tenant) => !tenant.rental_end_date).length;
+  const reviewSpaceCount = visibleFacilitySpaces.filter(
+    (space) => space.status === "needs_review" || space.status === "maintenance",
+  ).length;
   const showBranchContext = isGlobalFacilitiesManager || (isBranchManager && branches.length > 1);
   const portfolioDescription = isGlobalFacilitiesManager
     ? "Live facility, office, meeting-room, parking, and equipment records across branches."
@@ -310,28 +383,38 @@ function Facilities() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-5">
         <StatCard
-          label="Facilities"
-          value={loading ? "—" : String(facilityCount)}
-          hint="Branch locations and areas"
+          label="Facility spaces"
+          value={loading ? "—" : String(visibleFacilitySpaces.length)}
+          hint={`${visibleOfficeSpaces.length} offices · ${reviewSpaceCount} need review`}
         />
         <StatCard
-          label="Offices and desks"
-          value={loading ? "—" : String(officeAndDeskCount)}
-          hint={`${availableCount} available · ${occupiedCount} occupied · ${maintenanceCount} maintenance`}
+          label="Vacant offices"
+          value={
+            loading
+              ? "—"
+              : `${visibleOfficeSpaces.filter((space) => space.status === "vacant").length} / ${visibleOfficeSpaces.length}`
+          }
+          hint="Ready to offer or add to the tour"
           accent="success"
         />
         <StatCard
-          label="Rooms and parking"
-          value={loading ? "—" : String(otherResourceCount)}
-          hint="Active inventory records"
+          label="Occupied offices"
+          value={loading ? "—" : String(visibleOfficeSpaces.filter((space) => space.status === "occupied").length)}
+          hint="Current tenant-linked occupancy"
         />
         <StatCard
-          label="Equipment units available"
-          value={loading ? "—" : `${availableEquipment} / ${totalEquipment}`}
-          hint="Available / total units"
-          accent={availableEquipment ? "brand" : undefined}
+          label="Lease alerts"
+          value={loading ? "—" : String(expiredLeaseCount + soonLeaseCount)}
+          hint={`${expiredLeaseCount} expired · ${soonLeaseCount} due in 30 days`}
+          accent={expiredLeaseCount ? "warning" : undefined}
+        />
+        <StatCard
+          label="Missing lease dates"
+          value={loading ? "—" : String(missingLeaseDateCount)}
+          hint="Active tenant records need an expiry date"
+          accent={missingLeaseDateCount ? "warning" : "success"}
         />
       </div>
 
@@ -344,9 +427,9 @@ function Facilities() {
       <section className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">
           <div>
-            <h2 className="font-display text-base font-semibold">Facilities and branch inventory</h2>
+            <h2 className="font-display text-base font-semibold">Additional inventory</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Live spaces, rooms, parking, equipment, and monthly lease values.
+              Rooms, parking, equipment, and legacy branch inventory, separate from the office-space gallery.
             </p>
           </div>
         </div>
@@ -355,9 +438,9 @@ function Facilities() {
         ) : visibleFacilities.length === 0 ? (
           <div className="grid justify-items-center gap-2 p-10 text-center">
             <DoorOpen className="size-7 text-muted-foreground/60" />
-            <p className="text-sm font-medium">No facility records found</p>
+            <p className="text-sm font-medium">No additional inventory records</p>
             <p className="text-xs text-muted-foreground">
-              The selected scope has no active facility or inventory records.
+              Manage offices, tenants, lease dates, and tour photos in the spaces gallery above.
             </p>
           </div>
         ) : (

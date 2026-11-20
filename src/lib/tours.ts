@@ -42,11 +42,6 @@ const kyalamiPhotos = import.meta.glob<string>("../assets/virtual-tour/kyalami/*
   query: "?url",
   import: "default",
 });
-const kyalamiVacantPhotos = import.meta.glob<string>("../assets/virtual-tour/kyalami-vacant/office-*/*.jpg", {
-  eager: true,
-  query: "?url",
-  import: "default",
-});
 const rosebankPhotos = import.meta.glob<string>("../assets/virtual-tour/rosebank/*.jpg", {
   eager: true,
   query: "?url",
@@ -84,28 +79,6 @@ function additionalSpaces(
         image,
       };
     });
-}
-
-function vacantKyalamiSpaces(): TourSpace[] {
-  const allowedOfficeNumbers = new Set(["202", "209", "210", "211", "317", "318", "320", "323"]);
-  const imagesByOffice = new Map<string, string[]>();
-
-  for (const [path, image] of Object.entries(kyalamiVacantPhotos).sort(([a], [b]) => a.localeCompare(b))) {
-    const officeNumber = path.match(/\/office-(\d+)\//)?.[1];
-    if (!officeNumber || !allowedOfficeNumbers.has(officeNumber)) continue;
-    imagesByOffice.set(officeNumber, [...(imagesByOffice.get(officeNumber) ?? []), image]);
-  }
-
-  return [...imagesByOffice.entries()]
-    .sort(([a], [b]) => Number(a) - Number(b))
-    .map(([officeNumber, images]) => ({
-      id: `kyalami-vacant-office-${officeNumber}`,
-      name: `Vacant Office ${officeNumber}`,
-      category: "office",
-      description: "Explore this available Kyalami office from multiple views.",
-      image: images[0],
-      images,
-    }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -167,7 +140,6 @@ const kyalami: Tour = {
       description: "Corner office with natural light and storage.",
       image: photoUrl(kyalamiPhotos, "_IGN3368"),
     },
-    ...vacantKyalamiSpaces(),
     ...additionalSpaces(
       "kyalami",
       "Kyalami",
