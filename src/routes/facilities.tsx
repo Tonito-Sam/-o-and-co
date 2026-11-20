@@ -37,6 +37,7 @@ type FacilitySpaceSummary = {
 };
 type TenantLeaseSummary = {
   branch_id: string;
+  since: string | null;
   rental_end_date: string | null;
 };
 
@@ -130,7 +131,7 @@ function Facilities() {
       .in("branch_id", scopedBranchIds);
     const tenantLeaseQuery = supabase
       .from("tenants")
-      .select("branch_id,rental_end_date")
+      .select("branch_id,since,rental_end_date")
       .eq("status", "active")
       .in("branch_id", scopedBranchIds);
     if (isBranchManager) {
@@ -305,7 +306,9 @@ function Facilities() {
       tenant.rental_end_date >= todayKey &&
       tenant.rental_end_date <= nextMonthKey,
   ).length;
-  const missingLeaseDateCount = visibleLeaseRows.filter((tenant) => !tenant.rental_end_date).length;
+  const missingLeaseDateCount = visibleLeaseRows.filter(
+    (tenant) => !tenant.since || !tenant.rental_end_date,
+  ).length;
   const reviewSpaceCount = visibleFacilitySpaces.filter(
     (space) => space.status === "needs_review" || space.status === "maintenance",
   ).length;

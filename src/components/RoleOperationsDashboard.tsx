@@ -29,7 +29,7 @@ type DashboardEvent = {
   starts_at: string;
   kind: string | null;
 };
-type BranchLeaseRow = { rental_end_date: string | null };
+type BranchLeaseRow = { since: string | null; rental_end_date: string | null };
 type Snapshot = {
   availableOffices: number;
   totalOffices: number;
@@ -151,7 +151,7 @@ export function RoleOperationsDashboard({
             .eq("category", "office"),
           supabase
             .from("tenants")
-            .select("rental_end_date")
+            .select("since,rental_end_date")
             .eq("branch_id", branch.id)
             .eq("status", "active"),
         ]);
@@ -249,8 +249,9 @@ export function RoleOperationsDashboard({
           ({ rental_end_date }) =>
             rental_end_date && rental_end_date >= todayKey && rental_end_date <= cutoffKey,
         ).length,
-        tenantsMissingLeaseDate: tenantLeaseRows.filter(({ rental_end_date }) => !rental_end_date)
-          .length,
+        tenantsMissingLeaseDate: tenantLeaseRows.filter(
+          ({ since, rental_end_date }) => !since || !rental_end_date,
+        ).length,
         upcomingBookings,
         openTickets,
         upcomingEvents: (eventResult.data ?? []) as DashboardEvent[],

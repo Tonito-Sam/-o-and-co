@@ -151,6 +151,7 @@ export function FacilitySpaceGallery({
   const [draftName, setDraftName] = useState("");
   const [draftStatus, setDraftStatus] = useState<FacilitySpace["status"]>("shared");
   const [draftTenantId, setDraftTenantId] = useState("");
+  const [draftLeaseStartDate, setDraftLeaseStartDate] = useState("");
   const [draftRentalEndDate, setDraftRentalEndDate] = useState("");
   const [activePhoto, setActivePhoto] = useState<{ spaceId: string; index: number } | null>(null);
   const [tenantInfoSpace, setTenantInfoSpace] = useState<FacilitySpace | null>(null);
@@ -371,7 +372,9 @@ export function FacilitySpaceGallery({
     setDraftName(space.name);
     setDraftStatus(space.status);
     setDraftTenantId(space.tenant_id ?? "");
-    setDraftRentalEndDate(tenantById.get(space.tenant_id ?? "")?.rental_end_date ?? "");
+    const tenant = tenantById.get(space.tenant_id ?? "");
+    setDraftLeaseStartDate(tenant?.since ?? "");
+    setDraftRentalEndDate(tenant?.rental_end_date ?? "");
   };
 
   const saveSpace = async (confirmedVacancy = false) => {
@@ -379,6 +382,15 @@ export function FacilitySpaceGallery({
     const name = draftName.trim();
     if (!name) {
       toast.error("Space name cannot be empty.");
+      return;
+    }
+    if (
+      draftStatus === "occupied" &&
+      draftLeaseStartDate &&
+      draftRentalEndDate &&
+      draftLeaseStartDate > draftRentalEndDate
+    ) {
+      toast.error("The expiry or next renewal date must be on or after the lease start date.");
       return;
     }
     const supabase = getSupabaseClient();
@@ -407,7 +419,10 @@ export function FacilitySpaceGallery({
     if (draftStatus === "occupied" && draftTenantId) {
       const { error: leaseDateError } = await supabase
         .from("tenants")
-        .update({ rental_end_date: draftRentalEndDate || null })
+        .update({
+          since: draftLeaseStartDate || null,
+          rental_end_date: draftRentalEndDate || null,
+        })
         .eq("id", draftTenantId)
         .eq("branch_id", editingSpace.branch_id);
       if (leaseDateError) {
@@ -573,6 +588,7 @@ export function FacilitySpaceGallery({
     setDraftName(space.name);
     setDraftStatus("vacant");
     setDraftTenantId("");
+    setDraftLeaseStartDate("");
     setDraftRentalEndDate("");
     setVacancyConfirmationOpen(true);
   };
@@ -699,24 +715,23 @@ export function FacilitySpaceGallery({
                       {(() => {
                         const tenant = tenantById.get(space.tenant_id ?? "");
                         const lease = leaseDateState(tenant?.rental_end_date ?? null);
-                        return lease ? (
-                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                        return (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                             <span className="text-muted-foreground">
-                              Lease expiry: {lease.displayDate}
+                              Lease start: {formatTenantDate(tenant?.since ?? null)}
                             </span>
-                            {lease.expired ? (
+                            <span className="text-muted-foreground">
+                              Expiry / renewal: {lease?.displayDate ?? "Not recorded"}
+                            </span>
+                            {lease?.expired ? (
                               <Badge variant="destructive">Expired · check renewal</Badge>
-                            ) : lease.expiringSoon ? (
+                            ) : lease?.expiringSoon ? (
                               <Badge variant="secondary">
                                 Expires in {lease.daysUntilExpiry} day
                                 {lease.daysUntilExpiry === 1 ? "" : "s"}
                               </Badge>
                             ) : null}
                           </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            Lease expiry: Not recorded
-                          </p>
                         );
                       })()}
                     </div>
@@ -847,7 +862,9 @@ export function FacilitySpaceGallery({
                     onChange={(event) => {
                       const tenantId = event.target.value;
                       setDraftTenantId(tenantId);
-                      setDraftRentalEndDate(tenantById.get(tenantId)?.rental_end_date ?? "");
+                      const tenant = tenantById.get(tenantId);
+                      setDraftLeaseStartDate(tenant?.since ?? "");
+                      setDraftRentalEndDate(tenant?.rental_end_date ?? "");
                     }}
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                   >
@@ -866,16 +883,29 @@ export function FacilitySpaceGallery({
                 </div>
               ) : null}
               {draftStatus === "occupied" && draftTenantId ? (
-                <div className="space-y-1.5">
-                  <label htmlFor="facility-space-lease-expiry" className="text-sm font-medium">
-                    Lease expiry date
-                  </label>
-                  <Input
-                    id="facility-space-lease-expiry"
-                    type="date"
-                    value={draftRentalEndDate}
-                    onChange={(event) => setDraftRentalEndDate(event.target.value)}
-                  />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label htmlFor="facility-space-lease-start" className="text-sm font-medium">
+                      Lease start date
+                    </label>
+                    <Input
+                      id="facility-space-lease-start"
+                      type="date"
+                      value={draftLeaseStartDate}
+                      onChange={(event) => setDraftLeaseStartDate(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="facility-space-lease-expiry" className="text-sm font-medium">
+                      Expiry / next renewal date
+                    </label>
+                    <Input
+                      id="facility-space-lease-expiry"
+                      type="date"
+                      value={draftRentalEndDate}
+                      onChange={(event) => setDraftRentalEndDate(event.target.value)}
+                    />
+                  </div>
                 </div>
               ) : null}
               <div className="flex justify-end gap-2">
@@ -950,9 +980,9 @@ export function FacilitySpaceGallery({
                   {[
                     ["Lease status", tenantInfo.status],
                     ["Monthly rent", formatZar(tenantInfo.mrr_zar)],
-                    ["Lease starts", formatTenantDate(tenantInfo.since)],
+                    ["Lease start date", formatTenantDate(tenantInfo.since)],
                     ["Lease term", tenantInfo.lease_term || "Not recorded"],
-                    ["Lease expiry", formatTenantDate(tenantInfo.rental_end_date)],
+                    ["Expiry / next renewal date", formatTenantDate(tenantInfo.rental_end_date)],
                     ["Next rent escalation", formatTenantDate(tenantInfo.next_escalation_date)],
                     ["Primary contact", tenantInfo.primary_contact_name || "Not recorded"],
                     ["Contact email", tenantInfo.primary_contact_email || "Not recorded"],
