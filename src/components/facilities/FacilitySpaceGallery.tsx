@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type Branch = { id: string; name: string; slug: string };
@@ -76,6 +77,24 @@ type FacilitySpace = {
   facility_space_photos: Photo[];
   facility_space_tour_photos: TourPhoto[];
 };
+type SpaceCategoryTab =
+  | "all"
+  | "office"
+  | "boardroom"
+  | "meeting_room"
+  | "lounge"
+  | "gym"
+  | "other";
+
+const SPACE_CATEGORY_TABS: { value: SpaceCategoryTab; label: string }[] = [
+  { value: "all", label: "All spaces" },
+  { value: "office", label: "Offices" },
+  { value: "boardroom", label: "Boardrooms" },
+  { value: "meeting_room", label: "Meeting rooms" },
+  { value: "lounge", label: "Lounges" },
+  { value: "gym", label: "Gym" },
+  { value: "other", label: "Other shared spaces" },
+];
 
 const BUCKET = "facility-space-photos";
 const TOUR_BUCKET = "facility-vacant-tour-photos";
@@ -122,6 +141,18 @@ function relatedName(value: TenantRow["organizations"] | TenantRow["companies"])
   return record?.name?.trim() ?? "";
 }
 
+function getSpaceCategoryTab(space: FacilitySpace): Exclude<SpaceCategoryTab, "all"> {
+  const name = space.name.toLowerCase();
+  if (space.category === "office") return "office";
+  if (/board[\s_-]*room/.test(name)) return "boardroom";
+  if (space.category === "meeting_room" || /meeting[\s_-]*room/.test(name)) {
+    return "meeting_room";
+  }
+  if (/lounge/.test(name)) return "lounge";
+  if (/\b(gym|fitness)\b/.test(name)) return "gym";
+  return "other";
+}
+
 function safeFilename(filename: string) {
   return (
     filename
@@ -156,6 +187,7 @@ export function FacilitySpaceGallery({
   const [activePhoto, setActivePhoto] = useState<{ spaceId: string; index: number } | null>(null);
   const [tenantInfoSpace, setTenantInfoSpace] = useState<FacilitySpace | null>(null);
   const [vacancyConfirmationOpen, setVacancyConfirmationOpen] = useState(false);
+  const [categoryTab, setCategoryTab] = useState<SpaceCategoryTab>("all");
 
   const scopedBranches = useMemo(
     () => branches.filter((branch) => branchFilter === "all" || branch.id === branchFilter),
@@ -349,7 +381,7 @@ export function FacilitySpaceGallery({
     return true;
   };
 
-  const visibleSpaces = useMemo(() => {
+  const matchingSpaces = useMemo(() => {
     const query = search.trim().toLowerCase();
     return spaces.filter((space) => {
       if (branchFilter !== "all" && space.branch_id !== branchFilter) return false;
@@ -366,6 +398,25 @@ export function FacilitySpaceGallery({
       );
     });
   }, [branchFilter, branchNames, search, spaces, tenantLabel]);
+  const visibleSpaces = useMemo(
+    () =>
+      categoryTab === "all"
+        ? matchingSpaces
+        : matchingSpaces.filter((space) => getSpaceCategoryTab(space) === categoryTab),
+    [categoryTab, matchingSpaces],
+  );
+  const categoryCounts = useMemo(
+    () =>
+      new Map(
+        SPACE_CATEGORY_TABS.map(({ value }) => [
+          value,
+          value === "all"
+            ? matchingSpaces.length
+            : matchingSpaces.filter((space) => getSpaceCategoryTab(space) === value).length,
+        ]),
+      ),
+    [matchingSpaces],
+  );
 
   const openEdit = (space: FacilitySpace) => {
     setEditingSpace(space);
@@ -631,6 +682,25 @@ export function FacilitySpaceGallery({
         </p>
       ) : null}
 
+      <Tabs
+        value={categoryTab}
+        onValueChange={(value) => {
+          const selectedTab = SPACE_CATEGORY_TABS.find((tab) => tab.value === value);
+          if (selectedTab) setCategoryTab(selectedTab.value);
+        }}
+      >
+        <TabsList
+          aria-label="Facility space categories"
+          className="flex h-auto flex-wrap justify-start"
+        >
+          {SPACE_CATEGORY_TABS.map(({ value, label }) => (
+            <TabsTrigger key={value} value={value}>
+              {label} ({categoryCounts.get(value) ?? 0})
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       {loading ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
           Loading facility spaces and photos…
@@ -638,10 +708,13 @@ export function FacilitySpaceGallery({
       ) : visibleSpaces.length === 0 ? (
         <div className="grid justify-items-center gap-2 rounded-md border border-dashed p-8 text-center">
           <Images className="size-7 text-muted-foreground/60" />
-          <p className="text-sm font-medium">No facility spaces found</p>
+          <p className="text-sm font-medium">
+            {matchingSpaces.length === 0 ? "No facility spaces found" : "No spaces in this category"}
+          </p>
           <p className="text-xs text-muted-foreground">
-            Apply the facility gallery migration and import the Kyalami source folders to populate
-            this view.
+            {matchingSpaces.length === 0
+              ? "Apply the facility gallery migration and import the Kyalami source folders to populate this view."
+              : "Choose another category tab to see more spaces."}
           </p>
         </div>
       ) : (
@@ -769,16 +842,14 @@ export function FacilitySpaceGallery({
                       <ImagePlus className="mr-1.5 size-3.5" />
                       {busySpaceId === space.id ? "Uploading…" : "Add photos"}
                     </Button>
-                    {space.status === "occupied" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setTenantInfoSpace(space)}
-                        aria-label={`Tenant info for ${space.name}`}
-                      >
-                        <Info className="mr-1.5 size-3.5" /> Info
-                      </Button>
-                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTenantInfoSpace(space)}
+                      aria-label={`Tenant info for ${space.name}`}
+                    >
+                      <Info className="mr-1.5 size-3.5" /> Info
+                    </Button>
                     {space.status === "occupied" &&
                     leaseDateState(tenantById.get(space.tenant_id ?? "")?.rental_end_date ?? null)
                       ?.expired ? (
@@ -1012,7 +1083,7 @@ export function FacilitySpaceGallery({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No active tenant record is linked to this office.
+                No active tenant record is linked to this space.
               </p>
             )
           ) : null}
