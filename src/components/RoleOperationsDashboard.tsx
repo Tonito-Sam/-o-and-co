@@ -94,9 +94,9 @@ export function RoleOperationsDashboard({
       ? "Union Station"
       : role.id === "cafe-manager"
         ? role.branch
-      : role.id === "rosebank-sales"
-        ? "Rosebank"
-        : role.branch;
+        : role.id === "rosebank-sales"
+          ? "Rosebank"
+          : role.branch;
   const [snapshot, setSnapshot] = useState<Snapshot>(emptySnapshot);
   const [loading, setLoading] = useState(!isSuperadmin);
   const [error, setError] = useState("");
@@ -187,7 +187,7 @@ export function RoleOperationsDashboard({
               .select("id", { count: "exact", head: true })
               .eq("branch_id", branch.id)
               .gte("starts_at", now)
-              .in("status", ["requested", "confirmed"])
+              .in("status", ["requested", "quoted", "confirmed"])
           : Promise.resolve(null),
         role.id === "branch-manager"
           ? supabase
@@ -276,7 +276,8 @@ export function RoleOperationsDashboard({
   const config = {
     superadmin: {
       title: "Platform control center",
-      description: "Manage access, monitor system activity, and review the organization-wide operating tools.",
+      description:
+        "Manage access, monitor system activity, and review the organization-wide operating tools.",
       links: [
         { label: "Role settings", to: "/settings/roles", icon: Settings },
         { label: "Crawler activity", to: "/crawler-intelligence", icon: Activity },
@@ -287,7 +288,8 @@ export function RoleOperationsDashboard({
     },
     "branch-manager": {
       title: `${branchName ?? "Branch"} operations`,
-        description: "A branch-level view of vacant offices, lease dates, upcoming requests, and service issues.",
+      description:
+        "A branch-level view of vacant offices, lease dates, upcoming requests, and service issues.",
       links: [
         { label: "Facilities", to: "/facilities", icon: DoorOpen },
         { label: "Bookings", to: "/bookings", icon: CalendarDays },
@@ -297,7 +299,8 @@ export function RoleOperationsDashboard({
     },
     "cafe-manager": {
       title: `${branchName ?? "Branch"} café operations`,
-      description: "Manage the branch menu and stock, and keep tenant-facing café availability accurate.",
+      description:
+        "Manage the branch menu and stock, and keep tenant-facing café availability accurate.",
       links: [
         { label: "Manage café menu and stock", to: "/cafe", icon: ShoppingBag },
         { label: "Branch bookings", to: "/bookings", icon: CalendarDays },
@@ -306,7 +309,8 @@ export function RoleOperationsDashboard({
     },
     "rosebank-sales": {
       title: "Rosebank sales workspace",
-      description: "Local workspace availability, events, and direct access to your branch sales pipeline.",
+      description:
+        "Local workspace availability, events, and direct access to your branch sales pipeline.",
       links: [
         { label: "CRM pipeline", to: "/crm", icon: ClipboardCheck },
         { label: "Tenants", to: "/tenants", icon: Users },
@@ -316,7 +320,8 @@ export function RoleOperationsDashboard({
     },
     "community-manager": {
       title: `${branchName ?? "Branch"} community`,
-      description: "Keep the local community active through events, useful updates, and timely follow-up.",
+      description:
+        "Keep the local community active through events, useful updates, and timely follow-up.",
       links: [
         { label: "Events", to: "/events", icon: CalendarDays },
         { label: "Community feed", to: "/community", icon: MessageSquare },
@@ -326,7 +331,8 @@ export function RoleOperationsDashboard({
     },
     "lydia-admin": {
       title: "Union Station venue operations",
-      description: "Coordinate upcoming venue events and move booking requests through the venue workflow.",
+      description:
+        "Coordinate upcoming venue events and move booking requests through the venue workflow.",
       links: [
         { label: "Venue dashboard", to: "/union-station-admin", icon: Landmark },
         { label: "Booking workflow", to: "/union-station", icon: CalendarDays },
@@ -334,7 +340,15 @@ export function RoleOperationsDashboard({
         { label: "Facilities", to: "/facilities", icon: DoorOpen },
       ],
     },
-  }[role.id as "superadmin" | "branch-manager" | "cafe-manager" | "rosebank-sales" | "community-manager" | "lydia-admin"];
+  }[
+    role.id as
+      | "superadmin"
+      | "branch-manager"
+      | "cafe-manager"
+      | "rosebank-sales"
+      | "community-manager"
+      | "lydia-admin"
+  ];
 
   if (!config) return null;
 
@@ -362,17 +376,33 @@ export function RoleOperationsDashboard({
       : role.id === "cafe-manager"
         ? [
             { label: "Menu items", value: String(snapshot.activeCafeProducts), tone: "brand" },
-            { label: "Restock alerts", value: String(snapshot.lowStockCafeProducts), tone: snapshot.lowStockCafeProducts ? "warning" : "success" },
+            {
+              label: "Restock alerts",
+              value: String(snapshot.lowStockCafeProducts),
+              tone: snapshot.lowStockCafeProducts ? "warning" : "success",
+            },
             { label: "Assigned branch", value: branchName ?? "N/A", tone: "default" },
           ]
         : role.id === "community-manager"
           ? [
-              { label: "Published events", value: String(snapshot.upcomingEvents.length), tone: "brand" },
-              { label: "Pending posts", value: String(snapshot.pendingPosts), tone: snapshot.pendingPosts ? "warning" : "success" },
+              {
+                label: "Published events",
+                value: String(snapshot.upcomingEvents.length),
+                tone: "brand",
+              },
+              {
+                label: "Pending posts",
+                value: String(snapshot.pendingPosts),
+                tone: snapshot.pendingPosts ? "warning" : "success",
+              },
               { label: "Branch", value: branchName ?? "N/A", tone: "default" },
             ]
           : [
-              { label: "Upcoming venue events", value: String(snapshot.upcomingEvents.length), tone: "brand" },
+              {
+                label: "Upcoming venue events",
+                value: String(snapshot.upcomingEvents.length),
+                tone: "brand",
+              },
               { label: "Workflow status", value: "Open", tone: "success" },
               { label: "Venue", value: branchName ?? "N/A", tone: "default" },
             ];
@@ -384,7 +414,8 @@ export function RoleOperationsDashboard({
       description={config.description}
       actions={
         <Badge variant="outline" className="gap-1.5">
-          <Activity className="size-3.5" />{role.scope}
+          <Activity className="size-3.5" />
+          {role.scope}
         </Badge>
       }
     />
@@ -395,17 +426,39 @@ export function RoleOperationsDashboard({
       <div className="mx-auto max-w-350">
         {greeting}
         <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatCard label="Access profiles" value={String(ROLES.length)} hint="Configured role types" accent="brand" />
+          <StatCard
+            label="Access profiles"
+            value={String(ROLES.length)}
+            hint="Configured role types"
+            accent="brand"
+          />
           <StatCard label="Workspace scope" value="Group-wide" hint="Platform administration" />
-          <StatCard label="Controls" value="Role-based" hint="Review access and permissions" accent="success" />
-          <StatCard label="System activity" value="Review" hint="Crawler and platform queues" accent="warning" />
+          <StatCard
+            label="Controls"
+            value="Role-based"
+            hint="Review access and permissions"
+            accent="success"
+          />
+          <StatCard
+            label="System activity"
+            value="Review"
+            hint="Crawler and platform queues"
+            accent="warning"
+          />
         </div>
         <section>
           <h2 className="mb-3 font-display text-lg font-semibold">Administration</h2>
           <div className="divide-y border-y">
             {config.links.map(({ label, to, icon: Icon }) => (
-              <Link key={to} to={to} className="flex items-center justify-between gap-4 py-4 hover:text-brand">
-                <span className="flex items-center gap-3 text-sm font-medium"><Icon className="size-4 text-brand" />{label}</span>
+              <Link
+                key={to}
+                to={to}
+                className="flex items-center justify-between gap-4 py-4 hover:text-brand"
+              >
+                <span className="flex items-center gap-3 text-sm font-medium">
+                  <Icon className="size-4 text-brand" />
+                  {label}
+                </span>
                 <ArrowUpRight className="size-4 text-muted-foreground" />
               </Link>
             ))}
@@ -423,24 +476,40 @@ export function RoleOperationsDashboard({
   return (
     <div className="mx-auto max-w-350">
       {greeting}
-      {error && <p role="alert" className="mb-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">{error}</p>}
+      {error && (
+        <p
+          role="alert"
+          className="mb-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm"
+        >
+          {error}
+        </p>
+      )}
       {loading ? (
-        <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Loading branch activity</div>
+        <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />
+          Loading branch activity
+        </div>
       ) : (
         <>
           <section className="mb-8 rounded-lg border bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-display text-lg font-semibold">Priority focus</h2>
-                <p className="mt-1 text-sm text-muted-foreground">The main items to review for this workspace today.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The main items to review for this workspace today.
+                </p>
               </div>
               <Badge variant="outline">{role.title}</Badge>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               {focusHighlights.map(({ label, value, tone }) => (
                 <div key={label} className="rounded-md border bg-muted/20 p-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{label}</p>
-                  <p className={`mt-2 text-xl font-semibold ${tone === "warning" ? "text-warning" : tone === "success" ? "text-emerald-500" : tone === "brand" ? "text-brand" : "text-foreground"}`}>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    {label}
+                  </p>
+                  <p
+                    className={`mt-2 text-xl font-semibold ${tone === "warning" ? "text-warning" : tone === "success" ? "text-emerald-500" : tone === "brand" ? "text-brand" : "text-foreground"}`}
+                  >
                     {value}
                   </p>
                 </div>
@@ -489,27 +558,79 @@ export function RoleOperationsDashboard({
             </div>
           ) : isCafeManager ? (
             <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-3">
-              <StatCard label="Active menu items" value={String(snapshot.activeCafeProducts)} hint={`${branchName} café`} accent="brand" />
-              <StatCard label="Low-stock items" value={String(snapshot.lowStockCafeProducts)} hint="At or below reorder level" accent={snapshot.lowStockCafeProducts ? "warning" : "success"} />
-              <StatCard label="Café branch" value={branchName ?? "Not assigned"} hint="Assigned management scope" />
+              <StatCard
+                label="Active menu items"
+                value={String(snapshot.activeCafeProducts)}
+                hint={`${branchName} café`}
+                accent="brand"
+              />
+              <StatCard
+                label="Low-stock items"
+                value={String(snapshot.lowStockCafeProducts)}
+                hint="At or below reorder level"
+                accent={snapshot.lowStockCafeProducts ? "warning" : "success"}
+              />
+              <StatCard
+                label="Café branch"
+                value={branchName ?? "Not assigned"}
+                hint="Assigned management scope"
+              />
             </div>
           ) : isRosebankSales ? (
             <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-3">
-              <StatCard label="Available spaces" value={`${availableSpaces} / ${totalSpaces}`} hint="Offices and desks in Rosebank" accent="success" />
-              <StatCard label="Upcoming events" value={String(snapshot.upcomingEvents.length)} hint="Published at Rosebank" accent="brand" />
+              <StatCard
+                label="Available spaces"
+                value={`${availableSpaces} / ${totalSpaces}`}
+                hint="Offices and desks in Rosebank"
+                accent="success"
+              />
+              <StatCard
+                label="Upcoming events"
+                value={String(snapshot.upcomingEvents.length)}
+                hint="Published at Rosebank"
+                accent="brand"
+              />
               <StatCard label="Sales workspace" value="Rosebank" hint="Branch-scoped pipeline" />
             </div>
           ) : isCommunityManager ? (
             <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-3">
-              <StatCard label="Upcoming events" value={String(snapshot.upcomingEvents.length)} hint="Published at this branch" accent="brand" />
-              <StatCard label="Posts to review" value={String(snapshot.pendingPosts)} hint="Pending community approval" accent={snapshot.pendingPosts ? "warning" : undefined} />
-              <StatCard label="Available spaces" value={`${availableSpaces} / ${totalSpaces}`} hint="Offices and desks at your branch" accent="success" />
+              <StatCard
+                label="Upcoming events"
+                value={String(snapshot.upcomingEvents.length)}
+                hint="Published at this branch"
+                accent="brand"
+              />
+              <StatCard
+                label="Posts to review"
+                value={String(snapshot.pendingPosts)}
+                hint="Pending community approval"
+                accent={snapshot.pendingPosts ? "warning" : undefined}
+              />
+              <StatCard
+                label="Available spaces"
+                value={`${availableSpaces} / ${totalSpaces}`}
+                hint="Offices and desks at your branch"
+                accent="success"
+              />
             </div>
           ) : (
             <div className="mb-8 grid grid-cols-2 gap-3 xl:grid-cols-3">
-              <StatCard label="Upcoming venue events" value={String(snapshot.upcomingEvents.length)} hint="Published at Union Station" accent="brand" />
+              <StatCard
+                label="Upcoming venue events"
+                value={String(snapshot.upcomingEvents.length)}
+                hint="Published at Union Station"
+                accent="brand"
+              />
               <StatCard label="Venue workflow" value="Open" hint="Review requests and quotes" />
-              <StatCard label="Next event" value={snapshot.upcomingEvents[0] ? dateLabel(snapshot.upcomingEvents[0].starts_at) : "None scheduled"} hint={snapshot.upcomingEvents[0]?.title ?? "No upcoming published event"} />
+              <StatCard
+                label="Next event"
+                value={
+                  snapshot.upcomingEvents[0]
+                    ? dateLabel(snapshot.upcomingEvents[0].starts_at)
+                    : "None scheduled"
+                }
+                hint={snapshot.upcomingEvents[0]?.title ?? "No upcoming published event"}
+              />
             </div>
           )}
 
@@ -517,35 +638,95 @@ export function RoleOperationsDashboard({
             <section>
               <div className="mb-3 flex items-end justify-between gap-3">
                 <div>
-                  <h2 className="font-display text-lg font-semibold">{isBranchManager ? "Upcoming branch events" : isCafeManager ? "Café branch activity" : isCommunityManager ? "Community calendar" : "Union Station calendar"}</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">{isCafeManager ? `${branchName} · menu and inventory status` : `${branchName} · published events and start times`}</p>
+                  <h2 className="font-display text-lg font-semibold">
+                    {isBranchManager
+                      ? "Upcoming branch events"
+                      : isCafeManager
+                        ? "Café branch activity"
+                        : isCommunityManager
+                          ? "Community calendar"
+                          : "Union Station calendar"}
+                  </h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {isCafeManager
+                      ? `${branchName} · menu and inventory status`
+                      : `${branchName} · published events and start times`}
+                  </p>
                 </div>
-                <Button asChild variant="ghost" size="sm"><Link to={isCafeManager ? "/cafe" : isCommunityManager ? "/events" : isBranchManager ? "/bookings" : "/union-station-admin"}>{isCafeManager ? "Open café" : "Open calendar"} <ArrowUpRight className="size-3.5" /></Link></Button>
+                <Button asChild variant="ghost" size="sm">
+                  <Link
+                    to={
+                      isCafeManager
+                        ? "/cafe"
+                        : isCommunityManager
+                          ? "/events"
+                          : isBranchManager
+                            ? "/bookings"
+                            : "/union-station-admin"
+                    }
+                  >
+                    {isCafeManager ? "Open café" : "Open calendar"}{" "}
+                    <ArrowUpRight className="size-3.5" />
+                  </Link>
+                </Button>
               </div>
               {isCafeManager ? (
                 <div className="divide-y border-y">
-                  <div className="flex items-center justify-between py-4 text-sm"><span>Available products</span><span className="font-medium">{snapshot.activeCafeProducts}</span></div>
-                  <div className="flex items-center justify-between py-4 text-sm"><span>Products needing restock</span><span className="font-medium">{snapshot.lowStockCafeProducts}</span></div>
-                </div>
-              ) : <div className="divide-y border-y">
-                {snapshot.upcomingEvents.length ? snapshot.upcomingEvents.map((event) => (
-                  <div key={event.id} className="flex items-center justify-between gap-4 py-4">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">{event.title}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">{event.kind ?? "Event"}</div>
-                    </div>
-                    <time className="shrink-0 text-xs text-muted-foreground">{dateLabel(event.starts_at)}</time>
+                  <div className="flex items-center justify-between py-4 text-sm">
+                    <span>Available products</span>
+                    <span className="font-medium">{snapshot.activeCafeProducts}</span>
                   </div>
-                )) : <p className="py-5 text-sm text-muted-foreground">No upcoming published events for this branch.</p>}
-              </div>}
+                  <div className="flex items-center justify-between py-4 text-sm">
+                    <span>Products needing restock</span>
+                    <span className="font-medium">{snapshot.lowStockCafeProducts}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="divide-y border-y">
+                  {snapshot.upcomingEvents.length ? (
+                    snapshot.upcomingEvents.map((event) => (
+                      <div key={event.id} className="flex items-center justify-between gap-4 py-4">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium">{event.title}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {event.kind ?? "Event"}
+                          </div>
+                        </div>
+                        <time className="shrink-0 text-xs text-muted-foreground">
+                          {dateLabel(event.starts_at)}
+                        </time>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="py-5 text-sm text-muted-foreground">
+                      No upcoming published events for this branch.
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
 
             <section>
-              <h2 className="mb-3 font-display text-lg font-semibold">{isBranchManager ? "Branch work queues" : isCafeManager ? "Café tools" : isCommunityManager ? "Community tools" : "Venue tools"}</h2>
+              <h2 className="mb-3 font-display text-lg font-semibold">
+                {isBranchManager
+                  ? "Branch work queues"
+                  : isCafeManager
+                    ? "Café tools"
+                    : isCommunityManager
+                      ? "Community tools"
+                      : "Venue tools"}
+              </h2>
               <div className="divide-y border-y">
                 {config.links.map(({ label, to, icon: Icon }) => (
-                  <Link key={to} to={to} className="flex items-center justify-between gap-4 py-4 hover:text-brand">
-                    <span className="flex items-center gap-3 text-sm font-medium"><Icon className="size-4 text-brand" />{label}</span>
+                  <Link
+                    key={to}
+                    to={to}
+                    className="flex items-center justify-between gap-4 py-4 hover:text-brand"
+                  >
+                    <span className="flex items-center gap-3 text-sm font-medium">
+                      <Icon className="size-4 text-brand" />
+                      {label}
+                    </span>
                     <ArrowUpRight className="size-4 text-muted-foreground" />
                   </Link>
                 ))}

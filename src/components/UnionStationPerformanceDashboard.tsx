@@ -112,7 +112,7 @@ const initialQuoteLines = (request: VenueRequest): QuoteLineItem[] => [
   ...(request.av_addons.length ? [newQuoteLine("AV and production", request.av_addons.join(", "))] : []),
 ];
 
-export function UnionStationPerformanceDashboard() {
+export function UnionStationPerformanceDashboard({ requestId }: { requestId?: string }) {
   const { role } = useRole();
   const [requests, setRequests] = useState<VenueRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -174,6 +174,23 @@ export function UnionStationPerformanceDashboard() {
   useEffect(() => {
     void loadRequests();
   }, [loadRequests]);
+
+  useEffect(() => {
+    if (!requestId || loading) return;
+    const request = requests.find((item) => item.id === requestId);
+    if (!request) return;
+
+    document
+      .getElementById(`union-station-request-${request.id}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    if (canQuote && ["submitted", "in_review"].includes(request.status)) {
+      setQuoteRequest(request);
+      setQuoteRecipientAddress("");
+      setQuoteItems(initialQuoteLines(request));
+      setQuoteNotes("");
+    }
+  }, [canQuote, loading, requestId, requests]);
 
   const saveQuote = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -286,7 +303,7 @@ export function UnionStationPerformanceDashboard() {
         actions={
           <>
             <Button asChild variant="outline" size="sm">
-              <Link to="/union-station">
+              <Link to="/welcome" search={{ unionBooking: "open" }}>
                 Visitor booking page <ArrowUpRight className="ml-1 size-4" />
               </Link>
             </Button>
@@ -373,7 +390,11 @@ export function UnionStationPerformanceDashboard() {
               </thead>
               <tbody className="divide-y">
                 {requests.map((request) => (
-                  <tr key={request.id} className="hover:bg-muted/20">
+                  <tr
+                    key={request.id}
+                    id={`union-station-request-${request.id}`}
+                    className="hover:bg-muted/20"
+                  >
                     <td className="px-4 py-3 font-mono text-xs">{request.reference}</td>
                     <td className="px-4 py-3 font-medium">{request.client_company}</td>
                     <td className="px-4 py-3">

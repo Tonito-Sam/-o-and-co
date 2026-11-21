@@ -83,7 +83,8 @@ function buildPortfolio(
     );
     const branchBookings = bookings.filter(
       (booking) =>
-        booking.branch_id === branch.id && ["requested", "confirmed"].includes(booking.status),
+        booking.branch_id === branch.id &&
+        ["requested", "quoted", "confirmed"].includes(booking.status),
     );
     return {
       id: branch.id,
@@ -122,7 +123,8 @@ function buildPortfolio(
     openTickets: openTickets.length,
     urgentTickets: openTickets.filter((ticket) => ["urgent", "high"].includes(ticket.priority))
       .length,
-    pendingBookings: bookings.filter((booking) => booking.status === "requested").length,
+    pendingBookings: bookings.filter((booking) => ["requested", "quoted"].includes(booking.status))
+      .length,
     branches: liveBranches,
   };
 }

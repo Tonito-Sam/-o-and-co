@@ -3,5 +3,13 @@ import { UnionStationPerformanceDashboard } from "@/components/UnionStationPerfo
 
 export const Route = createFileRoute("/union-station-admin")({
   head: () => ({ meta: [{ title: "Union Station Performance — WorkspaceOS" }] }),
-  component: UnionStationPerformanceDashboard,
+  validateSearch: (search: Record<string, unknown>): { requestId?: string } => ({
+    ...(typeof search.requestId === "string" ? { requestId: search.requestId } : {}),
+  }),
+  component: UnionStationAdmin,
 });
+
+function UnionStationAdmin() {
+  const { requestId } = Route.useSearch();
+  return <UnionStationPerformanceDashboard requestId={requestId} />;
+}

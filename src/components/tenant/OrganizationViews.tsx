@@ -26,7 +26,7 @@ import { UnionStationBookingDialog } from "@/components/UnionStationBookingDialo
 
 type Branch = { id: string; name: string; city: string | null; status: string };
 type OrganizationContext = { userId: string; organizationId: string; branchId: string };
-type ResourceType = "room" | "office" | "desk" | "parking" | "equipment";
+type ResourceType = "room" | "facility_space" | "office" | "desk" | "parking" | "equipment";
 type Resource = {
   id: string;
   branchId: string;
@@ -35,7 +35,9 @@ type Resource = {
   detail: string;
   rate: number;
   ratePeriod: "hour" | "month";
+  bookingMode?: "room_allowance" | "event_quote";
 };
+type FacilityBookingSlot = { starts_at: string; ends_at: string; status: string };
 type InvoiceRow = {
   id: string;
   reference: string;
@@ -71,6 +73,13 @@ type TicketMessageRow = {
   created_at: string;
 };
 
+function toLocalDateTimeInput(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+}
+
 async function getOrganizationContext(): Promise<OrganizationContext> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error("Workspace data is not configured.");
@@ -105,43 +114,57 @@ async function getLiveBranches() {
 async function getBranchResources(branchId: string): Promise<Resource[]> {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error("Workspace data is not configured.");
-  const [sectionsResult, roomsResult, officesResult, desksResult, parkingResult, equipmentResult] =
-    await Promise.all([
-      supabase
-        .from("branch_sections")
-        .select("section_key")
-        .eq("branch_id", branchId)
-        .eq("enabled", true),
-      supabase
-        .from("rooms")
-        .select("id,branch_id,name,kind,capacity,hourly_zar,is_active")
-        .eq("branch_id", branchId)
-        .eq("is_active", true),
-      supabase
-        .from("branch_offices")
-        .select("id,branch_id,name,capacity,monthly_zar,status")
-        .eq("branch_id", branchId)
-        .eq("status", "available"),
-      supabase
-        .from("branch_desks")
-        .select("id,branch_id,name,desk_type,monthly_zar,status")
-        .eq("branch_id", branchId)
-        .eq("status", "available"),
-      supabase
-        .from("branch_parking_spaces")
-        .select("id,branch_id,name,parking_type,monthly_zar,status")
-        .eq("branch_id", branchId)
-        .eq("status", "available"),
-      supabase
-        .from("branch_equipment")
-        .select("id,branch_id,name,category,available_quantity,hourly_zar,is_active")
-        .eq("branch_id", branchId)
-        .eq("is_active", true)
-        .gt("available_quantity", 0),
-    ]);
+  const [
+    sectionsResult,
+    roomsResult,
+    facilitySpacesResult,
+    officesResult,
+    desksResult,
+    parkingResult,
+    equipmentResult,
+  ] = await Promise.all([
+    supabase
+      .from("branch_sections")
+      .select("section_key")
+      .eq("branch_id", branchId)
+      .eq("enabled", true),
+    supabase
+      .from("rooms")
+      .select("id,branch_id,name,kind,capacity,hourly_zar,is_active")
+      .eq("branch_id", branchId)
+      .eq("is_active", true),
+    supabase
+      .from("facility_spaces")
+      .select("id,branch_id,name,category")
+      .eq("branch_id", branchId)
+      .eq("is_bookable", true)
+      .eq("status", "shared"),
+    supabase
+      .from("branch_offices")
+      .select("id,branch_id,name,capacity,monthly_zar,status")
+      .eq("branch_id", branchId)
+      .eq("status", "available"),
+    supabase
+      .from("branch_desks")
+      .select("id,branch_id,name,desk_type,monthly_zar,status")
+      .eq("branch_id", branchId)
+      .eq("status", "available"),
+    supabase
+      .from("branch_parking_spaces")
+      .select("id,branch_id,name,parking_type,monthly_zar,status")
+      .eq("branch_id", branchId)
+      .eq("status", "available"),
+    supabase
+      .from("branch_equipment")
+      .select("id,branch_id,name,category,available_quantity,hourly_zar,is_active")
+      .eq("branch_id", branchId)
+      .eq("is_active", true)
+      .gt("available_quantity", 0),
+  ]);
   const results = [
     sectionsResult,
     roomsResult,
+    facilitySpacesResult,
     officesResult,
     desksResult,
     parkingResult,
@@ -162,6 +185,20 @@ async function getBranchResources(branchId: string): Promise<Resource[]> {
         rate: item.hourly_zar ?? 0,
         ratePeriod: "hour",
       });
+  for (const item of facilitySpacesResult.data ?? [])
+    resources.push({
+      id: item.id,
+      branchId: item.branch_id,
+      name: item.name,
+      type: "facility_space",
+      detail:
+        item.category === "meeting_room"
+          ? "Boardroom / meeting room"
+          : "Event space · quote provided after request",
+      rate: 0,
+      ratePeriod: "hour",
+      bookingMode: item.category === "meeting_room" ? "room_allowance" : "event_quote",
+    });
   if (enabled.has("offices"))
     for (const item of officesResult.data ?? [])
       resources.push({
@@ -211,6 +248,7 @@ async function getBranchResources(branchId: string): Promise<Resource[]> {
 
 const resourceLabel: Record<ResourceType, string> = {
   room: "Room",
+  facility_space: "Boardroom / meeting space",
   office: "Private office",
   desk: "Desk",
   parking: "Parking",
@@ -218,6 +256,11 @@ const resourceLabel: Record<ResourceType, string> = {
 };
 const resourceOptionGroups: { type: ResourceType; label: string; emptyLabel: string }[] = [
   { type: "room", label: "Rooms", emptyLabel: "No rooms currently listed" },
+  {
+    type: "facility_space",
+    label: "Boardrooms, meeting rooms & event spaces",
+    emptyLabel: "No bookable spaces currently listed",
+  },
   { type: "office", label: "Private offices", emptyLabel: "No private offices currently listed" },
   { type: "desk", label: "Desks", emptyLabel: "No desks currently listed" },
   { type: "parking", label: "Parking", emptyLabel: "No parking spaces currently listed" },
@@ -379,20 +422,39 @@ export function OrganizationFacilitiesView() {
 
 export function OrganizationBookingsView() {
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [organizationId, setOrganizationId] = useState("");
   const [branchId, setBranchId] = useState("");
   const [resources, setResources] = useState<Resource[]>([]);
   const [selectedResourceId, setSelectedResourceId] = useState("");
   const [startsAt, setStartsAt] = useState(() =>
-    new Date(Date.now() + 3600000).toISOString().slice(0, 16),
+    toLocalDateTimeInput(new Date(Date.now() + 3600000)),
   );
-  const [endsAt, setEndsAt] = useState(() =>
-    new Date(Date.now() + 7200000).toISOString().slice(0, 16),
-  );
+  const [endsAt, setEndsAt] = useState(() => toLocalDateTimeInput(new Date(Date.now() + 7200000)));
   const [quantity, setQuantity] = useState("1");
   const [notes, setNotes] = useState("");
   const [ownBookings, setOwnBookings] = useState<
-    Array<{ id: string; starts_at: string; ends_at: string; status: string; notes: string | null }>
+    Array<{
+      id: string;
+      starts_at: string;
+      ends_at: string;
+      status: string;
+      notes: string | null;
+      space_name?: string;
+      branch_name?: string;
+      facility_space_category?: string;
+      included_hours_applied?: number;
+      overage_amount_zar?: number;
+      event_quote_amount_zar?: number | null;
+    }>
   >([]);
+  const [includedHours, setIncludedHours] = useState(3);
+  const [usedHours, setUsedHours] = useState(0);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState("");
+  const [overageRate, setOverageRate] = useState(450);
+  const [availabilitySlots, setAvailabilitySlots] = useState<FacilityBookingSlot[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -403,6 +465,7 @@ export function OrganizationBookingsView() {
       .then(async ([context, liveBranches]) => {
         if (!active) return;
         setBranches(liveBranches);
+        setOrganizationId(context.organizationId);
         const initial = liveBranches.find((branch) => branch.id === context.branchId)
           ? context.branchId
           : (liveBranches[0]?.id ?? "");
@@ -452,15 +515,52 @@ export function OrganizationBookingsView() {
               .order("starts_at", { ascending: false })
               .limit(20),
           ]);
-          if (active)
+          const [facilityBookings, settings] = await Promise.all([
+            supabase!
+              .from("branch_resource_bookings")
+              .select(
+                "id,starts_at,ends_at,status,notes,included_hours_applied,overage_amount_zar,event_quote_amount_zar,facility_spaces(name,category),branches(name)",
+              )
+              .eq("organization_id", membership.organization_id)
+              .not("facility_space_id", "is", null)
+              .order("starts_at", { ascending: false })
+              .limit(20),
+            supabase!
+              .from("facility_booking_settings")
+              .select("included_hours_monthly,overage_hourly_zar")
+              .eq("id", 1)
+              .single(),
+          ]);
+          if (active && (settings.error || facilityBookings.error)) {
+            throw settings.error ?? facilityBookings.error;
+          }
+          if (active && settings.data) {
+            setIncludedHours(Number(settings.data.included_hours_monthly));
+            setOverageRate(settings.data.overage_hourly_zar);
+          }
+          if (active) {
+            const completedFacilityBookings = facilityBookings.data ?? [];
             setOwnBookings(
               [
                 ...(rooms.data ?? []).filter((booking) => invoiceBookingIds.has(booking.id)),
                 ...(resourcesForOrg.data ?? []).filter((booking) =>
                   invoiceResourceIds.has(booking.id),
                 ),
+                ...completedFacilityBookings.map((booking) => {
+                  const spaceRelation = booking.facility_spaces;
+                  const branchRelation = booking.branches;
+                  const space = Array.isArray(spaceRelation) ? spaceRelation[0] : spaceRelation;
+                  const branch = Array.isArray(branchRelation) ? branchRelation[0] : branchRelation;
+                  return {
+                    ...booking,
+                    space_name: space?.name ?? "Meeting space",
+                    facility_space_category: space?.category ?? "meeting_room",
+                    branch_name: branch?.name ?? "Branch",
+                  };
+                }),
               ].sort((a, b) => b.starts_at.localeCompare(a.starts_at)),
             );
+          }
         }
         if (active) setLoading(false);
       })
@@ -499,11 +599,151 @@ export function OrganizationBookingsView() {
           Math.ceil((new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 3600000),
         )
       : 1;
+  const exactDurationHours =
+    startsAt && endsAt
+      ? Math.max(0, (new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 3600000)
+      : 0;
+  const freeHoursRemaining = Math.max(0, includedHours - usedHours);
   const estimate = selectedResource
-    ? selectedResource.ratePeriod === "hour"
-      ? selectedResource.rate * durationHours * quantityValue
-      : selectedResource.rate * quantityValue
+    ? selectedResource.type === "facility_space"
+      ? selectedResource.bookingMode === "room_allowance"
+        ? Math.ceil(Math.max(0, exactDurationHours - freeHoursRemaining)) * overageRate
+        : 0
+      : selectedResource.ratePeriod === "hour"
+        ? selectedResource.rate * durationHours * quantityValue
+        : selectedResource.rate * quantityValue
     : 0;
+  const requestedStart = new Date(startsAt);
+  const requestedDurationMs = new Date(endsAt).getTime() - requestedStart.getTime();
+  const isFacilityBooking = selectedResource?.type === "facility_space";
+  const isRoomAllowanceBooking = selectedResource?.bookingMode === "room_allowance";
+  const selectedSlotUnavailable =
+    isFacilityBooking &&
+    availabilitySlots.some(
+      (slot) =>
+        new Date(slot.starts_at).getTime() < new Date(endsAt).getTime() &&
+        new Date(slot.ends_at).getTime() > requestedStart.getTime(),
+    );
+  let nextAvailableStart: Date | null = requestedStart;
+  if (isFacilityBooking && selectedSlotUnavailable && requestedDurationMs > 0) {
+    for (const slot of [...availabilitySlots].sort((a, b) =>
+      a.starts_at.localeCompare(b.starts_at),
+    )) {
+      const candidateEnd = nextAvailableStart.getTime() + requestedDurationMs;
+      if (candidateEnd <= new Date(slot.starts_at).getTime()) break;
+      if (nextAvailableStart.getTime() < new Date(slot.ends_at).getTime()) {
+        nextAvailableStart = new Date(slot.ends_at);
+      }
+    }
+    const selectedDayEnd = new Date(`${startsAt.slice(0, 10)}T00:00:00`);
+    selectedDayEnd.setDate(selectedDayEnd.getDate() + 1);
+    if (nextAvailableStart.getTime() + requestedDurationMs > selectedDayEnd.getTime()) {
+      nextAvailableStart = null;
+    }
+  }
+
+  useEffect(() => {
+    if (!organizationId || !isRoomAllowanceBooking || !startsAt) {
+      setUsedHours(0);
+      setUsageLoading(false);
+      setUsageError("");
+      return;
+    }
+    let active = true;
+    setUsedHours(0);
+    setUsageLoading(true);
+    setUsageError("");
+    const monthKey = startsAt.slice(0, 7);
+    const monthStart = new Date(`${monthKey}-01T00:00:00+02:00`);
+    const nextMonthStart = new Date(monthStart);
+    nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setUsageError("Workspace data is not configured.");
+      setUsageLoading(false);
+      return;
+    }
+    void Promise.resolve(
+      supabase
+        .from("branch_resource_bookings")
+        .select("included_hours_applied")
+        .eq("organization_id", organizationId)
+        .eq("status", "confirmed")
+        .not("facility_space_id", "is", null)
+        .gte("starts_at", monthStart.toISOString())
+        .lt("starts_at", nextMonthStart.toISOString()),
+    )
+      .then(({ data, error: usageError }) => {
+        if (!active) return;
+        if (usageError) {
+          setUsageError(usageError.message);
+          setUsageLoading(false);
+          return;
+        }
+        setUsedHours(
+          (data ?? []).reduce((total, booking) => total + booking.included_hours_applied, 0),
+        );
+        setUsageLoading(false);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setUsageError(cause instanceof Error ? cause.message : "Could not load monthly usage.");
+        setUsageLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isRoomAllowanceBooking, organizationId, startsAt]);
+
+  useEffect(() => {
+    if (selectedResource?.type !== "facility_space" || !startsAt) {
+      setAvailabilitySlots([]);
+      setAvailabilityLoading(false);
+      setAvailabilityError("");
+      return;
+    }
+    let active = true;
+    setAvailabilityLoading(true);
+    setAvailabilityError("");
+    const dayStart = new Date(`${startsAt.slice(0, 10)}T00:00:00`);
+    const nextDay = new Date(dayStart);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setAvailabilityError("Workspace data is not configured.");
+      setAvailabilityLoading(false);
+      return;
+    }
+    void Promise.resolve(
+      supabase.rpc("get_facility_space_availability", {
+        p_space_id: selectedResource.id,
+        p_from: dayStart.toISOString(),
+        p_to: nextDay.toISOString(),
+      }),
+    )
+      .then(({ data, error: availabilityError }) => {
+        if (!active) return;
+        if (availabilityError) {
+          setAvailabilityError(availabilityError.message);
+          setAvailabilitySlots([]);
+          setAvailabilityLoading(false);
+          return;
+        }
+        setAvailabilitySlots((data ?? []) as FacilityBookingSlot[]);
+        setAvailabilityLoading(false);
+      })
+      .catch((cause: unknown) => {
+        if (!active) return;
+        setAvailabilityError(
+          cause instanceof Error ? cause.message : "Could not load room availability.",
+        );
+        setAvailabilitySlots([]);
+        setAvailabilityLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedResource?.id, selectedResource?.type, startsAt]);
 
   const submitBooking = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -518,6 +758,61 @@ export function OrganizationBookingsView() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     setSubmitting(true);
+    if (selectedResource.type === "facility_space") {
+      const { data, error: requestError } = await supabase.rpc("request_facility_space_booking", {
+        p_branch_id: branchId,
+        p_space_id: selectedResource.id,
+        p_starts_at: new Date(startsAt).toISOString(),
+        p_ends_at: new Date(endsAt).toISOString(),
+        p_guests: quantityValue,
+        p_notes: notes.trim() || null,
+      });
+      setSubmitting(false);
+      if (requestError) {
+        toast.error(requestError.message);
+        return;
+      }
+      const result = data as {
+        resource_booking_id: string;
+        space_name: string;
+        space_category: string;
+        status: string;
+      };
+      setOwnBookings((current) =>
+        [
+          {
+            id: result.resource_booking_id,
+            starts_at: new Date(startsAt).toISOString(),
+            ends_at: new Date(endsAt).toISOString(),
+            status: result.status,
+            notes: notes.trim() || null,
+            space_name: result.space_name,
+            branch_name: branches.find((branch) => branch.id === branchId)?.name ?? "Branch",
+            facility_space_category: result.space_category,
+            included_hours_applied: 0,
+            overage_amount_zar: estimate,
+            event_quote_amount_zar: null,
+          },
+          ...current,
+        ].slice(0, 20),
+      );
+      setAvailabilitySlots((current) => [
+        ...current,
+        {
+          starts_at: new Date(startsAt).toISOString(),
+          ends_at: new Date(endsAt).toISOString(),
+          status: "requested",
+        },
+      ]);
+      toast.success(
+        selectedResource.bookingMode === "event_quote"
+          ? "Event-space request sent. The branch will send a quote for your approval."
+          : estimate > 0
+            ? `Booking request sent. Estimated overage: ${formatZAR(estimate)}; charge is finalized on approval.`
+            : "Booking request sent. Your included monthly hours cover this request.",
+      );
+      return;
+    }
     const { data, error: requestError } = await supabase.rpc(
       "request_organization_resource_booking",
       {
@@ -570,12 +865,42 @@ export function OrganizationBookingsView() {
     );
   };
 
+  const respondToEventQuote = async (bookingId: string, accept: boolean) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    setSubmitting(true);
+    const { data, error: responseError } = await supabase.rpc("respond_to_facility_event_quote", {
+      p_booking_id: bookingId,
+      p_accept: accept,
+    });
+    setSubmitting(false);
+    if (responseError) {
+      toast.error(
+        `Could not ${accept ? "accept" : "decline"} the event quote: ${responseError.message}`,
+      );
+      return;
+    }
+    const result = data as { status: string; invoice_reference?: string };
+    setOwnBookings((current) =>
+      current.map((booking) =>
+        booking.id === bookingId ? { ...booking, status: result.status } : booking,
+      ),
+    );
+    toast.success(
+      accept
+        ? result.invoice_reference
+          ? `Quote accepted. Invoice ${result.invoice_reference} is ready in Billing.`
+          : "Quote accepted and booking confirmed."
+        : "Quote declined; the event space is available again.",
+    );
+  };
+
   return (
     <div className="mx-auto max-w-350">
       <PageHeader
         eyebrow="Your Office & Co workspace"
         title="Bookings"
-        description="Choose a live branch and request a space. An invoice is generated with each booking request."
+        description="Book available rooms and meeting spaces across live branches, and track your requests and reservations."
       />
       {error && (
         <p
@@ -625,14 +950,20 @@ export function OrganizationBookingsView() {
                 >
                   <option value="">Choose a space or service</option>
                   {resourceOptionGroups.map((group) => {
-                    const groupResources = resources.filter((resource) => resource.type === group.type);
+                    const groupResources = resources.filter(
+                      (resource) => resource.type === group.type,
+                    );
                     return (
                       <optgroup key={group.type} label={group.label}>
                         {groupResources.length ? (
                           groupResources.map((resource) => (
                             <option key={`${resource.type}-${resource.id}`} value={resource.id}>
-                              {resource.name} · {resource.detail} · {formatZAR(resource.rate)}/
-                              {resource.ratePeriod}
+                              {resource.name} · {resource.detail}
+                              {resource.type === "facility_space"
+                                ? resource.bookingMode === "event_quote"
+                                  ? " · Quote required"
+                                  : ` · ${freeHoursRemaining.toFixed(1)} included hr left · ${formatZAR(overageRate)}/overage hr`
+                                : ` · ${formatZAR(resource.rate)}/${resource.ratePeriod}`}
                             </option>
                           ))
                         ) : (
@@ -645,6 +976,24 @@ export function OrganizationBookingsView() {
                   })}
                 </select>
               </div>
+              {isRoomAllowanceBooking ? (
+                <div className="rounded-md border bg-muted/20 p-3 text-sm">
+                  <p className="font-medium">Monthly room allowance</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {usageLoading
+                      ? "Checking this month's confirmed room usage…"
+                      : usageError
+                        ? `Usage unavailable: ${usageError}`
+                        : `${usedHours.toFixed(1)} of ${includedHours} included hours used · ${freeHoursRemaining.toFixed(1)} remaining this month. After that, overage is ${formatZAR(overageRate)}/hour.`}
+                  </p>
+                </div>
+              ) : null}
+              {selectedResource?.bookingMode === "event_quote" ? (
+                <p className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
+                  The event team will quote this space separately. Your booking is confirmed only
+                  after you accept the quote.
+                </p>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="booking-start">Start</Label>
@@ -667,6 +1016,66 @@ export function OrganizationBookingsView() {
                   />
                 </div>
               </div>
+              {isFacilityBooking ? (
+                <div className="rounded-md border p-3">
+                  {availabilityError ? (
+                    <p role="alert" className="mb-2 text-sm text-destructive">
+                      Availability unavailable: {availabilityError}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      Availability ·{" "}
+                      {new Date(`${startsAt.slice(0, 10)}T00:00:00`).toLocaleDateString()}
+                    </p>
+                    <Badge variant={selectedSlotUnavailable ? "destructive" : "secondary"}>
+                      {availabilityLoading
+                        ? "Checking availability…"
+                        : selectedSlotUnavailable
+                          ? nextAvailableStart
+                            ? `Unavailable · next gap ${nextAvailableStart.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                            : "No later gap today"
+                          : "Selected time is clear"}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Requested and confirmed bookings hold their time slot.
+                  </p>
+                  {availabilitySlots.length ? (
+                    <ul className="mt-3 space-y-1">
+                      {availabilitySlots.map((slot) => (
+                        <li
+                          key={`${slot.starts_at}-${slot.ends_at}`}
+                          className="flex items-center justify-between gap-3 text-xs"
+                        >
+                          <span>
+                            {new Date(slot.starts_at).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            {" – "}
+                            {new Date(slot.ends_at).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                          <span className="capitalize text-muted-foreground">
+                            {slot.status === "requested"
+                              ? "Awaiting approval"
+                              : slot.status === "quoted"
+                                ? "Quote awaiting acceptance"
+                                : "Booked"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      No reservations recorded for this date.
+                    </p>
+                  )}
+                </div>
+              ) : null}
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="booking-quantity">People / quantity</Label>
@@ -680,9 +1089,15 @@ export function OrganizationBookingsView() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Estimated charge</Label>
+                  <Label>
+                    {selectedResource?.bookingMode === "event_quote"
+                      ? "Event-space quote"
+                      : "Estimated charge"}
+                  </Label>
                   <div className="flex h-10 items-center rounded-md border bg-muted/30 px-3 text-sm font-semibold">
-                    {formatZAR(estimate)}
+                    {selectedResource?.bookingMode === "event_quote"
+                      ? "Provided after request"
+                      : formatZAR(estimate)}
                   </div>
                 </div>
               </div>
@@ -696,12 +1111,31 @@ export function OrganizationBookingsView() {
                   placeholder="Share setup or access requirements"
                 />
               </div>
-              <Button type="submit" disabled={submitting || !resources.length} className="w-full">
-                {submitting ? "Submitting request…" : "Request booking and invoice"}
+              <Button
+                type="submit"
+                disabled={
+                  submitting ||
+                  !resources.length ||
+                  (isRoomAllowanceBooking && (usageLoading || Boolean(usageError))) ||
+                  (isFacilityBooking &&
+                    (availabilityLoading || Boolean(availabilityError) || selectedSlotUnavailable))
+                }
+                className="w-full"
+              >
+                {submitting
+                  ? "Submitting request…"
+                  : isFacilityBooking
+                    ? selectedResource?.bookingMode === "event_quote"
+                      ? "Request event-space quote"
+                      : "Request room booking"
+                    : "Request booking and invoice"}
               </Button>
               <p className="text-xs text-muted-foreground">
-                Your request is held for branch confirmation. The invoice will appear in Billing;
-                payment is due by its listed date.
+                {isFacilityBooking
+                  ? selectedResource?.bookingMode === "event_quote"
+                    ? "The slot is held while the branch prepares a quote. It is confirmed only after you accept."
+                    : "The slot is held while the branch reviews your request. Included hours are used only after approval; any overage is invoiced then."
+                  : "Your request is held for branch confirmation. The invoice will appear in Billing; payment is due by its listed date."}
               </p>
             </form>
           )}
@@ -724,17 +1158,65 @@ export function OrganizationBookingsView() {
             {ownBookings.map((booking) => (
               <div key={booking.id} className="flex items-start justify-between gap-4 py-4">
                 <div>
-                  <p className="text-sm font-medium">{booking.notes || "Facility booking"}</p>
+                  <p className="text-sm font-medium">
+                    {booking.space_name || booking.notes || "Facility booking"}
+                  </p>
+                  {booking.branch_name ? (
+                    <p className="text-xs text-muted-foreground">{booking.branch_name}</p>
+                  ) : null}
                   <p className="mt-1 text-xs text-muted-foreground">
                     {new Intl.DateTimeFormat("en", {
                       dateStyle: "medium",
                       timeStyle: "short",
                     }).format(new Date(booking.starts_at))}
+                    {" – "}
+                    {new Intl.DateTimeFormat("en", {
+                      timeStyle: "short",
+                    }).format(new Date(booking.ends_at))}
                   </p>
+                  {booking.overage_amount_zar ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {booking.status === "confirmed" ? "Overage charge" : "Estimated overage"}{" "}
+                      {formatZAR(booking.overage_amount_zar)}
+                    </p>
+                  ) : null}
+                  {booking.included_hours_applied ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {booking.included_hours_applied.toFixed(1)} included hours applied
+                    </p>
+                  ) : null}
+                  {booking.event_quote_amount_zar !== null &&
+                  booking.event_quote_amount_zar !== undefined ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Event quote: {formatZAR(booking.event_quote_amount_zar)}
+                    </p>
+                  ) : null}
                 </div>
-                <Badge variant={booking.status === "confirmed" ? "secondary" : "outline"}>
-                  {booking.status}
-                </Badge>
+                <div className="flex flex-col items-end gap-2">
+                  <Badge variant={booking.status === "confirmed" ? "secondary" : "outline"}>
+                    {booking.status}
+                  </Badge>
+                  {booking.status === "quoted" &&
+                  booking.facility_space_category !== "meeting_room" ? (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => void respondToEventQuote(booking.id, true)}
+                        disabled={submitting}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void respondToEventQuote(booking.id, false)}
+                        disabled={submitting}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ))}
             {!ownBookings.length && (
@@ -796,15 +1278,20 @@ export function OrganizationSupportView() {
     const { data: messages, error: messageError } = await supabase
       .from("support_ticket_messages")
       .select("id,ticket_id,author_id,message,created_at")
-      .in("ticket_id", ticketRows.map((ticket) => ticket.id))
+      .in(
+        "ticket_id",
+        ticketRows.map((ticket) => ticket.id),
+      )
       .order("created_at", { ascending: true });
     if (messageError) throw messageError;
-    setTicketMessages((messages ?? []).reduce<Record<string, TicketMessageRow[]>>((grouped, message) => {
-      const ticketMessagesForTicket = grouped[message.ticket_id] ?? [];
-      ticketMessagesForTicket.push(message as TicketMessageRow);
-      grouped[message.ticket_id] = ticketMessagesForTicket;
-      return grouped;
-    }, {}));
+    setTicketMessages(
+      (messages ?? []).reduce<Record<string, TicketMessageRow[]>>((grouped, message) => {
+        const ticketMessagesForTicket = grouped[message.ticket_id] ?? [];
+        ticketMessagesForTicket.push(message as TicketMessageRow);
+        grouped[message.ticket_id] = ticketMessagesForTicket;
+        return grouped;
+      }, {}),
+    );
   };
   useEffect(() => {
     void loadTickets()
@@ -906,13 +1393,19 @@ export function OrganizationSupportView() {
                     </p>
                     {(ticketMessages[ticket.id]?.length ?? 0) > 0 && (
                       <details className="mt-3 rounded-md border px-3 py-2">
-                        <summary className="cursor-pointer text-xs font-medium">Support replies ({ticketMessages[ticket.id].length})</summary>
+                        <summary className="cursor-pointer text-xs font-medium">
+                          Support replies ({ticketMessages[ticket.id].length})
+                        </summary>
                         <div className="mt-3 space-y-3">
                           {ticketMessages[ticket.id].map((message) => (
                             <div key={message.id} className="border-t pt-2">
-                              <div className="text-[11px] font-medium">{message.author_id === viewerId ? "You" : "Office & Co support"}</div>
+                              <div className="text-[11px] font-medium">
+                                {message.author_id === viewerId ? "You" : "Office & Co support"}
+                              </div>
                               <p className="mt-1 whitespace-pre-wrap text-xs">{message.message}</p>
-                              <p className="mt-1 text-[10px] text-muted-foreground">{new Date(message.created_at).toLocaleString()}</p>
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                {new Date(message.created_at).toLocaleString()}
+                              </p>
                             </div>
                           ))}
                         </div>
@@ -1072,7 +1565,9 @@ export function OrganizationBillingView() {
       {!loading && (
         <section className="mt-8">
           <div className="border-b pb-3">
-            <h2 className="font-display text-base font-semibold">Union Station requests &amp; quotes</h2>
+            <h2 className="font-display text-base font-semibold">
+              Union Station requests &amp; quotes
+            </h2>
             <p className="mt-1 text-xs text-muted-foreground">
               Quotes are not invoices. An invoice appears above once the venue team issues it.
             </p>
@@ -1080,14 +1575,31 @@ export function OrganizationBillingView() {
           {venueRequests.length ? (
             <div className="divide-y">
               {venueRequests.map((request) => (
-                <div key={request.id} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div
+                  key={request.id}
+                  className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
+                >
                   <div>
-                    <p className="text-sm font-medium">{request.reference} · {request.event_type}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Event date {request.event_date}</p>
+                    <p className="text-sm font-medium">
+                      {request.reference} · {request.event_type}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Event date {request.event_date}
+                    </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    {request.estimate_zar > 0 ? <span className="text-sm font-semibold">{formatZAR(request.estimate_zar)}</span> : null}
-                    <Badge variant={request.status === "quoted" || request.status === "invoiced" ? "default" : "outline"}>
+                    {request.estimate_zar > 0 ? (
+                      <span className="text-sm font-semibold">
+                        {formatZAR(request.estimate_zar)}
+                      </span>
+                    ) : null}
+                    <Badge
+                      variant={
+                        request.status === "quoted" || request.status === "invoiced"
+                          ? "default"
+                          : "outline"
+                      }
+                    >
                       {request.status.replaceAll("_", " ")}
                     </Badge>
                   </div>
@@ -1096,7 +1608,16 @@ export function OrganizationBillingView() {
             </div>
           ) : (
             <p className="py-4 text-sm text-muted-foreground">
-              No Union Station requests are linked to your organization yet. <Button type="button" variant="link" className="h-auto p-0 align-baseline font-medium text-brand underline underline-offset-4" onClick={() => setQuoteDialogOpen(true)}>Request a quote</Button>.
+              No Union Station requests are linked to your organization yet.{" "}
+              <Button
+                type="button"
+                variant="link"
+                className="h-auto p-0 align-baseline font-medium text-brand underline underline-offset-4"
+                onClick={() => setQuoteDialogOpen(true)}
+              >
+                Request a quote
+              </Button>
+              .
             </p>
           )}
         </section>

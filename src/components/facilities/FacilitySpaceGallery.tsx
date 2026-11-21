@@ -71,6 +71,7 @@ type FacilitySpace = {
   name: string;
   category: "office" | "meeting_room" | "communal" | "amenity";
   status: "occupied" | "vacant" | "shared" | "maintenance" | "needs_review";
+  is_bookable: boolean;
   office_number: string | null;
   tenant_id: string | null;
   metadata: Record<string, unknown> | null;
@@ -78,13 +79,7 @@ type FacilitySpace = {
   facility_space_tour_photos: TourPhoto[];
 };
 type SpaceCategoryTab =
-  | "all"
-  | "office"
-  | "boardroom"
-  | "meeting_room"
-  | "lounge"
-  | "gym"
-  | "other";
+  "all" | "office" | "boardroom" | "meeting_room" | "lounge" | "gym" | "other";
 
 const SPACE_CATEGORY_TABS: { value: SpaceCategoryTab; label: string }[] = [
   { value: "all", label: "All spaces" },
@@ -184,6 +179,7 @@ export function FacilitySpaceGallery({
   const [draftTenantId, setDraftTenantId] = useState("");
   const [draftLeaseStartDate, setDraftLeaseStartDate] = useState("");
   const [draftRentalEndDate, setDraftRentalEndDate] = useState("");
+  const [draftBookable, setDraftBookable] = useState(false);
   const [activePhoto, setActivePhoto] = useState<{ spaceId: string; index: number } | null>(null);
   const [tenantInfoSpace, setTenantInfoSpace] = useState<FacilitySpace | null>(null);
   const [vacancyConfirmationOpen, setVacancyConfirmationOpen] = useState(false);
@@ -233,7 +229,7 @@ export function FacilitySpaceGallery({
       supabase
         .from("facility_spaces")
         .select(
-          "id,branch_id,code,name,category,status,office_number,tenant_id,metadata,facility_space_photos(id,object_path,source_filename,caption,sort_order),facility_space_tour_photos(id,source_photo_id,object_path,sort_order)",
+          "id,branch_id,code,name,category,status,is_bookable,office_number,tenant_id,metadata,facility_space_photos(id,object_path,source_filename,caption,sort_order),facility_space_tour_photos(id,source_photo_id,object_path,sort_order)",
         )
         .in("branch_id", branchIds)
         .order("name"),
@@ -422,6 +418,7 @@ export function FacilitySpaceGallery({
     setEditingSpace(space);
     setDraftName(space.name);
     setDraftStatus(space.status);
+    setDraftBookable(space.is_bookable);
     setDraftTenantId(space.tenant_id ?? "");
     const tenant = tenantById.get(space.tenant_id ?? "");
     setDraftLeaseStartDate(tenant?.since ?? "");
@@ -493,6 +490,7 @@ export function FacilitySpaceGallery({
           .update({
             name,
             status: draftStatus,
+            is_bookable: draftBookable && draftStatus === "shared",
             tenant_id: draftStatus === "occupied" ? draftTenantId || null : null,
           })
           .eq("id", editingSpace.id);
@@ -649,7 +647,7 @@ export function FacilitySpaceGallery({
     : null;
   const activePhotoRecord = activeSpace?.facility_space_photos[activePhoto?.index ?? -1] ?? null;
   const tenantInfo = tenantInfoSpace
-    ? tenantById.get(tenantInfoSpace.tenant_id ?? "") ?? null
+    ? (tenantById.get(tenantInfoSpace.tenant_id ?? "") ?? null)
     : null;
 
   return (
@@ -709,7 +707,9 @@ export function FacilitySpaceGallery({
         <div className="grid justify-items-center gap-2 rounded-md border border-dashed p-8 text-center">
           <Images className="size-7 text-muted-foreground/60" />
           <p className="text-sm font-medium">
-            {matchingSpaces.length === 0 ? "No facility spaces found" : "No spaces in this category"}
+            {matchingSpaces.length === 0
+              ? "No facility spaces found"
+              : "No spaces in this category"}
           </p>
           <p className="text-xs text-muted-foreground">
             {matchingSpaces.length === 0
@@ -768,17 +768,22 @@ export function FacilitySpaceGallery({
                           : ""}
                       </p>
                     </div>
-                    <Badge
-                      variant={
-                        space.status === "needs_review"
-                          ? "destructive"
-                          : space.status === "occupied"
-                            ? "secondary"
-                            : "default"
-                      }
-                    >
-                      {space.status.replaceAll("_", " ")}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge
+                        variant={
+                          space.status === "needs_review"
+                            ? "destructive"
+                            : space.status === "occupied"
+                              ? "secondary"
+                              : "default"
+                        }
+                      >
+                        {space.status.replaceAll("_", " ")}
+                      </Badge>
+                      {space.is_bookable && space.status === "shared" ? (
+                        <Badge variant="outline">Bookable</Badge>
+                      ) : null}
+                    </div>
                   </div>
                   {space.status === "occupied" ? (
                     <div className="space-y-1">
@@ -922,6 +927,24 @@ export function FacilitySpaceGallery({
                   <option value="needs_review">Needs review</option>
                 </select>
               </div>
+              {editingSpace.category !== "office" ? (
+                <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={draftBookable}
+                    onChange={(event) => setDraftBookable(event.target.checked)}
+                    disabled={draftStatus !== "shared"}
+                    className="mt-0.5 size-4 accent-primary"
+                  />
+                  <span>
+                    <span className="block font-medium">Available for tenant bookings</span>
+                    <span className="text-xs text-muted-foreground">
+                      Bookable only while this space is marked shared. Bookings are scheduled and do
+                      not change its permanent facility status.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
               {draftStatus === "occupied" ? (
                 <div className="space-y-1.5">
                   <label htmlFor="facility-space-tenant" className="text-sm font-medium">
