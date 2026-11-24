@@ -157,7 +157,7 @@ const rosebank: Tour = {
   branchName: "Rosebank",
   tagline: "Private offices and shared workspace in Rosebank.",
   address: "Rosebank, Johannesburg",
-  coverImage: photoUrl(rosebankPhotos, "_IGN3163"),
+  coverImage: photoUrl(rosebankPhotos, "rosebank-cover-enhanced"),
   soundtrack: rosebankSoundtrack,
   spaces: [
     {
@@ -166,7 +166,11 @@ const rosebank: Tour = {
       category: "shared",
       capacity: "Open seating",
       description: "The social heart of the branch — coffee, couches, conversation.",
-      image: photoUrl(rosebankPhotos, "_IGN3053"),
+      image: photoUrl(rosebankPhotos, "rosebank-lounge-enhanced"),
+      images: [
+        photoUrl(rosebankPhotos, "rosebank-lounge-enhanced"),
+        photoUrl(rosebankPhotos, "rosebank-reception-enhanced"),
+      ],
       hotspots: [
         { x: 55, y: 60, label: "Meeting room →", toSpaceId: "rosebank-meeting" },
       ],
@@ -176,8 +180,13 @@ const rosebank: Tour = {
       name: "Meeting Room",
       category: "meeting",
       capacity: "Seats 8",
-      description: "A glass-walled room for team stand-ups and client calls.",
-      image: photoUrl(rosebankPhotos, "_IGN3066"),
+      description: "A boardroom for team stand-ups and client calls.",
+      image: photoUrl(rosebankPhotos, "rosebank-boardroom-enhanced"),
+      images: [
+        photoUrl(rosebankPhotos, "rosebank-boardroom-enhanced"),
+        photoUrl(rosebankPhotos, "rosebank-boardroom-2-enhanced"),
+        photoUrl(rosebankPhotos, "rosebank-boardroom-3-enhanced"),
+      ],
       hotspots: [
         { x: 40, y: 55, label: "Private office →", toSpaceId: "rosebank-office" },
       ],
@@ -188,13 +197,30 @@ const rosebank: Tour = {
       category: "office",
       capacity: "Fits 2–5",
       description: "Furnished, lockable office off the shared corridor.",
-      image: photoUrl(rosebankPhotos, "_IGN3107"),
+      image: photoUrl(rosebankPhotos, "rosebank-office-enhanced"),
+      images: [
+        photoUrl(rosebankPhotos, "rosebank-office-enhanced"),
+        photoUrl(rosebankPhotos, "rosebank-office-2-enhanced"),
+      ],
     },
     ...additionalSpaces(
       "rosebank",
       "Rosebank",
       rosebankPhotos,
-      new Set(["_IGN3163", "_IGN3053", "_IGN3066", "_IGN3107"]),
+      new Set([
+        "_IGN3163",
+        "_IGN3053",
+        "_IGN3066",
+        "_IGN3107",
+        "rosebank-cover-enhanced",
+        "rosebank-lounge-enhanced",
+        "rosebank-reception-enhanced",
+        "rosebank-boardroom-enhanced",
+        "rosebank-boardroom-2-enhanced",
+        "rosebank-boardroom-3-enhanced",
+        "rosebank-office-enhanced",
+        "rosebank-office-2-enhanced",
+      ]),
     ),
   ],
 };
