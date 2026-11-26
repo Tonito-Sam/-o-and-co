@@ -29,7 +29,7 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { Toaster } from "@/components/ui/sonner";
 import { RoleProvider, useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
-import { LoaderCircle } from "lucide-react";
+import { BrandLogo } from "@/components/BrandLogo";
 import { WorkspaceAssistantWidget } from "@/routes/ai-assistant";
 
 function NotFoundComponent() {
@@ -186,6 +186,31 @@ function RootComponent() {
   );
 }
 
+function WorkspaceLoadingScreen() {
+  return (
+    <div
+      className="grid min-h-screen place-items-center bg-[#0d121c] px-6 text-white"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex w-full max-w-xs flex-col items-center text-center">
+        <BrandLogo className="h-auto w-52 object-contain" />
+        <p className="mt-5 text-sm font-medium tracking-[0.18em] text-white/75">
+          Spaces that Inspire
+        </p>
+        <p className="mt-10 text-sm text-white/70">Loading your workspace</p>
+        <div
+          className="mt-3 h-1 w-56 overflow-hidden rounded-full bg-white/15"
+          role="progressbar"
+          aria-label="Loading workspace"
+        >
+          <div className="workspace-loading-bar h-full w-1/3 rounded-full bg-white/85" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RouteAccessGuard({ pathname, children }: { pathname: string; children: ReactNode }) {
   const navigate = useNavigate();
   const onboardingRoute = pathname === "/onboarding";
@@ -274,14 +299,7 @@ function RouteAccessGuard({ pathname, children }: { pathname: string; children: 
   }, [navigate, onboardingRoute, pathname]);
 
   if (!isPublicRoute(pathname) && checkingAccess) {
-    return (
-      <div className="grid min-h-screen place-items-center bg-background text-muted-foreground" role="status" aria-live="polite">
-        <div className="flex items-center gap-2 text-sm">
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Loading your workspace
-        </div>
-      </div>
-    );
+    return <WorkspaceLoadingScreen />;
   }
   if (accessError) {
     return <div className="grid min-h-screen place-items-center px-4 text-center text-sm text-destructive" role="alert">{accessError}</div>;
@@ -306,18 +324,7 @@ function AuthenticatedWorkspace({
     role.id === "organization-admin" || role.id === "organization-member";
 
   if (isLoading || !isAuthenticated) {
-    return (
-      <div
-        className="grid min-h-screen place-items-center bg-background text-muted-foreground"
-        role="status"
-        aria-live="polite"
-      >
-        <div className="flex items-center gap-2 text-sm">
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Loading your workspace
-        </div>
-      </div>
-    );
+    return <WorkspaceLoadingScreen />;
   }
 
   return (

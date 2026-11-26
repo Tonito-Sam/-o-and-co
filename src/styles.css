@@ -349,3 +349,23 @@
     transform: translateY(0);
   }
 }
+
+.workspace-loading-bar {
+  animation: workspace-loading-bar 1.4s ease-in-out infinite;
+}
+
+@keyframes workspace-loading-bar {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-loading-bar {
+    animation: none;
+    transform: translateX(0);
+  }
+}
