@@ -664,9 +664,6 @@ export function SuperadminDashboard({
 
       {/* ---------------- OVERVIEW ---------------- */}
       {view === "overview" && <>
-        <p className="text-sm text-muted-foreground">
-          Share updates, ideas and opportunities across the Office &amp; Co community. Posts appear immediately; report content that concerns you.
-        </p>
         {communityStatsError && (
           <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
             Could not load community statistics: {communityStatsError}

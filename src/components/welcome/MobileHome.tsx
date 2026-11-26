@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Landmark,
+  LogIn,
   MapPin,
   Play,
   Presentation,
@@ -283,11 +284,20 @@ export function MobileHome({
               </button>
             </div>
           )}
-          <div className="mt-5">
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <Button
+              asChild
+              size="lg"
+              className="min-h-12 w-full gap-2 bg-white text-slate-950 hover:bg-white/90"
+            >
+              <Link to="/auth/sign-in">
+                <LogIn className="size-4" /> Portal Login
+              </Link>
+            </Button>
             <Button
               size="lg"
               variant="outline"
-              className="min-h-12 w-full gap-2 border-white/35 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              className="min-h-12 w-full gap-2 border-white/35 bg-white/10 px-2 text-white hover:bg-white/20 hover:text-white"
               onClick={onOpenTourSelector}
             >
               <Play className="size-4" /> Virtual Tour

@@ -3,7 +3,6 @@ import { AuthLayout } from "@/components/AuthLayout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { PasswordInput } from "@/components/PasswordInput";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -95,9 +94,9 @@ function SignIn() {
             required
           />
         </div>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-          <Checkbox defaultChecked /> Remember me on this device
-        </label>
+        <p className="text-sm text-muted-foreground">
+          You’ll stay signed in on this device until you sign out.
+        </p>
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </Button>
