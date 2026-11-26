@@ -297,7 +297,7 @@ function AuthenticatedWorkspace({
   sidebarOpen: boolean;
   onSidebarOpenChange: (open: boolean) => void;
 }) {
-  const { role, isLoading } = useRole();
+  const { role, isLoading, isAuthenticated } = useRole();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const showFloatingAssistant =
     pathname === "/" &&
@@ -305,7 +305,7 @@ function AuthenticatedWorkspace({
   const isOrganizationWorkspace =
     role.id === "organization-admin" || role.id === "organization-member";
 
-  if (isLoading) {
+  if (isLoading || !isAuthenticated) {
     return (
       <div
         className="grid min-h-screen place-items-center bg-background text-muted-foreground"

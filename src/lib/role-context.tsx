@@ -13,6 +13,7 @@ type ModuleOverrides = Partial<Record<RoleId, Partial<Record<CommunityModuleKey,
 type Ctx = {
   role: RoleDef;
   isLoading: boolean;
+  isAuthenticated: boolean;
   updateFullName: (name: string) => void;
   roles: RoleDef[];
   showCommunity: boolean;
@@ -62,6 +63,7 @@ const sharedOrganizationRoutes = new Set(["/community", "/cafe", "/marketplace",
 export function RoleProvider({ children }: { children: ReactNode }) {
   const [roleId, setRoleId] = useState<RoleId>("member");
   const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
   const [organizationName, setOrganizationName] = useState<string | null>(null);
   const [organizationBranch, setOrganizationBranch] = useState<string | null>(null);
@@ -96,6 +98,8 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
     let active = true;
     let loadedIdentityUserId: string | null = null;
+    let authRevision = 0;
+    let identityRevision = 0;
     const roleMap: Record<string, RoleId> = {
       superadmin: "superadmin",
       group_admin: "group-admin",
@@ -112,11 +116,13 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     };
 
     const loadIdentity = async (userId: string, email?: string) => {
+      const requestRevision = ++identityRevision;
+      const isCurrentRequest = () => active && requestRevision === identityRevision;
       const [roleResult, profileResult] = await Promise.all([
         supabase.from("user_roles").select("role,branch_id").eq("user_id", userId),
         supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle(),
       ]);
-      if (!active) return;
+      if (!isCurrentRequest()) return;
 
       const { data: membership, error: membershipError } = await supabase
         .from("organization_members")
@@ -174,7 +180,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         branchNamesForRole = (data ?? []).map((branch) => branch.name);
         assignedBranch = branchNamesForRole[0] ?? null;
       }
-      if (!active) return;
+      if (!isCurrentRequest()) return;
       setAssignedBranchName(assignedBranch);
       setAssignedBranchIds(branchIdsForRole);
       setAssignedBranchNames(branchNamesForRole);
@@ -206,7 +212,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
             .eq("branch_id", membership.branch_id)
             .eq("enabled", true),
         ]);
-        if (!active) return;
+        if (!isCurrentRequest()) return;
         setOrganizationName(organizationResult.data?.name ?? null);
         setOrganizationBranch(branchResult.data?.name ?? null);
         if (sectionsResult.error) {
@@ -226,12 +232,15 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         setOrganizationSections(null);
       }
       loadedIdentityUserId = userId;
+      setIsAuthenticated(true);
       setIsLoading(false);
     };
 
+    const initialAuthRevision = authRevision;
     void supabase.auth.getUser().then(({ data, error }) => {
-      if (!active) return;
+      if (!active || authRevision !== initialAuthRevision) return;
       if (error || !data.user) {
+        setIsAuthenticated(false);
         setRoleId("member");
         setUserName(null);
         setIsLoading(false);
@@ -239,8 +248,9 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       }
       void loadIdentity(data.user.id, data.user.email);
     }).catch((error: unknown) => {
-      if (!active) return;
+      if (!active || authRevision !== initialAuthRevision) return;
       console.error("Authentication identity lookup failed:", error);
+      setIsAuthenticated(false);
       setRoleId("member");
       setUserName(null);
       setIsLoading(false);
@@ -258,7 +268,11 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      authRevision += 1;
+      identityRevision += 1;
+      loadedIdentityUserId = null;
       setIsLoading(true);
+      setIsAuthenticated(false);
       if (!session?.user) {
         loadedIdentityUserId = null;
         setRoleId("member");
@@ -273,7 +287,12 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
         return;
       }
-      window.setTimeout(() => void loadIdentity(session.user.id, session.user.email), 0);
+      const eventRevision = authRevision;
+      window.setTimeout(() => {
+        if (active && authRevision === eventRevision) {
+          void loadIdentity(session.user.id, session.user.email);
+        }
+      }, 0);
     });
 
     return () => {
@@ -414,6 +433,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       value={{
         role,
         isLoading,
+        isAuthenticated,
         updateFullName: setUserName,
         roles: ROLES,
         showCommunity,
