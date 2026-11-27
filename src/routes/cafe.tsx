@@ -89,6 +89,7 @@ function Cafe() {
   const defaultTab = isAdmin ? "admin" : "shop";
   const initialTab = view === "kitchen" && isAdmin ? "kitchen" : defaultTab;
   const [tab, setTab] = useState(initialTab);
+  const [cartCount, setCartCount] = useState(0);
   const [workBranch, setWorkBranch] = useState("");
   const [branchOptions, setBranchOptions] = useState<Array<{ id: string; name: string }>>([]);
   const liveBranches = branchOptions.map(({ name }) => name);
@@ -225,6 +226,11 @@ function Cafe() {
           {canManagePantry && <TabsTrigger value="pantry" className="gap-1.5"><Package className="size-3.5" />Pantry &amp; inventory</TabsTrigger>}
           <TabsTrigger value="shop" className="gap-1.5"><Store className="size-3.5" />Shop</TabsTrigger>
           <TabsTrigger value="orders" className="gap-1.5"><History className="size-3.5" />My orders</TabsTrigger>
+          <TabsTrigger value="cart" className="gap-1.5">
+            <ShoppingBag className="size-3.5" />
+            Cart
+            {cartCount > 0 && <Badge variant="secondary" className="ml-1 h-5 min-w-5 justify-center px-1 text-[10px]">{cartCount}</Badge>}
+          </TabsTrigger>
         </TabsList>
 
         {(["cafe-manager", "branch-manager", "community-manager"].includes(role.id)) && !branch && <p role="alert" className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">This account has no authorized café branch. Ask an administrator to assign the correct branch before using café operations.</p>}
@@ -232,7 +238,20 @@ function Cafe() {
         {isAdmin && <TabsContent value="admin"><AdminPanel defaultBranch={branch} liveBranches={liveBranches} canPickBranch={canPickCafeBranch} products={products} loading={productsLoading} onReload={() => setReloadKey((key) => key + 1)} /></TabsContent>}
         {isAdmin && <TabsContent value="kitchen"><KitchenBoard defaultBranch={branch} canPickBranch={canPickCafeBranch} /></TabsContent>}
         {canManagePantry && <TabsContent value="pantry"><PantryBoard defaultBranch={branch} canPickBranch={role.id === "branch-manager"} canReviewRequests={canReviewRestockRequests} /></TabsContent>}
-        <TabsContent value="shop"><Shop defaultBranch={branch} liveBranches={liveBranches} canPickBranch={isAdmin && canPickCafeBranch} paystackEnabled={paystackEnabled} products={products} loading={productsLoading} onPaymentConfirmed={() => setTab("orders")} /></TabsContent>
+        <TabsContent value={tab === "cart" ? "cart" : "shop"} forceMount>
+          <Shop
+            view={tab === "cart" ? "cart" : "shop"}
+            defaultBranch={branch}
+            liveBranches={liveBranches}
+            canPickBranch={isAdmin && canPickCafeBranch}
+            paystackEnabled={paystackEnabled}
+            products={products}
+            loading={productsLoading}
+            onCartCountChange={setCartCount}
+            onBrowseMenu={() => setTab("shop")}
+            onPaymentConfirmed={() => setTab("orders")}
+          />
+        </TabsContent>
         <TabsContent value="orders"><MyOrders branch={branch} active={tab === "orders"} /></TabsContent>
       </Tabs>
     </div>
@@ -1341,7 +1360,7 @@ type CafeCheckoutResult = {
   created_at: string;
 };
 
-function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, products, loading, onPaymentConfirmed }: { defaultBranch: string; liveBranches: string[]; canPickBranch: boolean; paystackEnabled: boolean; products: CafeProduct[]; loading: boolean; onPaymentConfirmed: () => void }) {
+function Shop({ view, defaultBranch, liveBranches, canPickBranch, paystackEnabled, products, loading, onCartCountChange, onBrowseMenu, onPaymentConfirmed }: { view: "shop" | "cart"; defaultBranch: string; liveBranches: string[]; canPickBranch: boolean; paystackEnabled: boolean; products: CafeProduct[]; loading: boolean; onCartCountChange: (count: number) => void; onBrowseMenu: () => void; onPaymentConfirmed: () => void }) {
   const [branch, setBranch] = useState(defaultBranch);
   const [cat, setCat] = useState<string>("All");
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -1355,6 +1374,10 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
   useEffect(() => {
     setBranch(defaultBranch);
   }, [defaultBranch]);
+
+  useEffect(() => {
+    onCartCountChange(Object.values(cart).reduce((total, quantity) => total + quantity, 0));
+  }, [cart, onCartCountChange]);
 
   const items = useMemo(() => products.filter(p => p.branch === branch && p.available && (!p.trackInventory || (p.stockQuantity ?? 0) > 0) && (cat === "All" || p.category === cat)), [products, branch, cat]);
   const cats = useMemo(() => {
@@ -1478,8 +1501,8 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
   };
 
   return (
-    <div className="grid xl:grid-cols-[1.2fr_360px] gap-4">
-      <div className="space-y-4">
+    <div className={view === "cart" ? "mx-auto max-w-2xl" : "grid gap-4 xl:grid-cols-[1.2fr_360px]"}>
+      {view === "shop" && <div className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             {canPickBranch ? (
@@ -1536,15 +1559,21 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
           ))}
           {items.length === 0 && <div className="col-span-full text-center text-sm text-muted-foreground py-12">No items in this category yet.</div>}
         </div>}
-      </div>
+      </div>}
 
-      <aside className="card-soft p-5 h-fit sticky top-20">
+      <aside className={`card-soft p-5 h-fit ${view === "cart" ? "" : "sticky top-20 hidden xl:block"}`}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-display font-semibold flex items-center gap-2"><ShoppingBag className="size-4 text-brand" />Your order</h3>
           <Badge variant="outline" className="text-[10px]">{cartItems.length} item{cartItems.length !== 1 ? "s" : ""}</Badge>
         </div>
         {cartItems.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Add items from the menu to start your order.</p>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Your cart is empty. Add items from the café menu to start an order.</p>
+            <Button type="button" variant="outline" className="w-full" onClick={onBrowseMenu}>
+              <Store className="mr-2 size-4" />
+              Browse café menu
+            </Button>
+          </div>
         ) : (
           <>
             <div className="space-y-2 max-h-[40vh] overflow-y-auto">
@@ -1557,7 +1586,33 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
                       <div className="text-[11px] text-muted-foreground">{formatZAR(i.price)} × {i.qty}</div>
                     </div>
                   </div>
-                  <div className="font-medium tabular-nums">{formatZAR(i.price * i.qty)}</div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="size-7"
+                        aria-label={`Remove one ${i.name}`}
+                        onClick={() => dec(i.id)}
+                      >
+                        <Minus className="size-3" />
+                      </Button>
+                      <span className="w-5 text-center text-xs font-medium tabular-nums">{i.qty}</span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="size-7"
+                        aria-label={`Add one ${i.name}`}
+                        disabled={i.trackInventory && i.qty >= (i.stockQuantity ?? 0)}
+                        onClick={() => inc(i.id)}
+                      >
+                        <Plus className="size-3" />
+                      </Button>
+                    </div>
+                    <div className="min-w-16 text-right font-medium tabular-nums">{formatZAR(i.price * i.qty)}</div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1590,6 +1645,12 @@ function Shop({ defaultBranch, liveBranches, canPickBranch, paystackEnabled, pro
                 <Button variant="outline" onClick={() => setViewingInvoice(invoicePreview)}>View invoice</Button>
                 <Button variant="outline" onClick={() => downloadInvoicePdf(invoicePreview)}>Download PDF</Button>
               </div>
+            )}
+            {view === "cart" && (
+              <Button type="button" variant="ghost" className="mt-2 w-full" onClick={onBrowseMenu}>
+                <Store className="mr-2 size-4" />
+                Continue shopping
+              </Button>
             )}
           </>
         )}
