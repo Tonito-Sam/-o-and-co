@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader, StatCard } from "@/components/PageHeader";
+import { WorkspaceLoadingScreen } from "@/components/WorkspaceLoadingScreen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -1335,10 +1336,7 @@ function OrganizationOverview({
           </p>
         )}
         {loading ? (
-          <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-            <LoaderCircle className="size-4 animate-spin" />
-            Loading your workspace…
-          </div>
+          <WorkspaceLoadingScreen overlay />
         ) : (
           <>
             <section className="mb-8">

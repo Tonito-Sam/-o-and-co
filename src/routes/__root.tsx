@@ -26,10 +26,10 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TopBar } from "@/components/TopBar";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
+import { WorkspaceLoadingScreen } from "@/components/WorkspaceLoadingScreen";
 import { Toaster } from "@/components/ui/sonner";
 import { RoleProvider, useRole } from "@/lib/role-context";
 import { getSupabaseClient } from "@/lib/supabase";
-import { BrandLogo } from "@/components/BrandLogo";
 import { WorkspaceAssistantWidget } from "@/routes/ai-assistant";
 
 function NotFoundComponent() {
@@ -183,31 +183,6 @@ function RootComponent() {
         </RouteAccessGuard>
       </RoleProvider>
     </QueryClientProvider>
-  );
-}
-
-function WorkspaceLoadingScreen() {
-  return (
-    <div
-      className="grid min-h-screen place-items-center bg-[#0d121c] px-6 text-white"
-      role="status"
-      aria-live="polite"
-    >
-      <div className="flex w-full max-w-xs flex-col items-center text-center">
-        <BrandLogo className="h-auto w-52 object-contain" />
-        <p className="mt-5 text-sm font-medium tracking-[0.18em] text-white/75">
-          Spaces that Inspire
-        </p>
-        <p className="mt-10 text-sm text-white/70">Loading your workspace</p>
-        <div
-          className="mt-3 h-1 w-56 overflow-hidden rounded-full bg-white/15"
-          role="progressbar"
-          aria-label="Loading workspace"
-        >
-          <div className="workspace-loading-bar h-full w-1/3 rounded-full bg-white/85" />
-        </div>
-      </div>
-    </div>
   );
 }
 
