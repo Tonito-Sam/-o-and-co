@@ -79,7 +79,7 @@ type CafeProductRow = {
 
 function Cafe() {
   const { role } = useRole();
-  const paystackEnabled = import.meta.env.VITE_CAFE_PAYSTACK_ENABLED === "true";
+  const paystackEnabled = import.meta.env.VITE_CAFE_PAYSTACK_ENABLED?.trim().toLowerCase() === "true";
   const { view, payment_reference: paymentReference } = Route.useSearch();
   const navigate = useNavigate();
   const isCafeManager = role.id === "cafe-manager";
